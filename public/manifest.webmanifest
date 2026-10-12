@@ -1,0 +1,20 @@
+{
+  "name": "King's Study — Pirc, KID & KIA Trainer",
+  "short_name": "King's Study",
+  "description": "Play Pirc, KID and KIA with a local chess coach. Understand decisions and practise useful lessons.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f0e7",
+  "theme_color": "#214d3b",
+  "categories": ["education", "games"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

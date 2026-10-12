@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="King's Study">
+  <rect width="64" height="64" rx="10" fill="#214d3b"/>
+  <path d="M19 49h27v5H18a3 3 0 0 1 1-5Zm4-7h19l3 5H20l3-5Zm9-31c8 3 13 10 10 19-1 4-4 7-7 10H23c7-6 10-12 8-18l-5 5-6-6 12-10Zm0 6-5 5 3 3 5-5-3-3Z" fill="#f3e7d0"/>
+  <circle cx="35" cy="17" r="2.2" fill="#bd8331"/>
+</svg>

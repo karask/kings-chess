@@ -1,0 +1,46 @@
+{
+  "name": "kings-study",
+  "version": "1.0.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "description": "A local-first Pirc, KID and KIA chess trainer.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "local": "npm run build && vite preview",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node --import tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test:engine": "node --import tsx scripts/check-coached-stockfish.mjs",
+    "lint": "eslint src lib tests scripts vite.config.ts"
+  },
+  "dependencies": {
+    "@mliebelt/pgn-parser": "^1.4.19",
+    "chess.js": "^1.4.0",
+    "dexie": "^4.4.5",
+    "react": "19.2.6",
+    "react-chessboard": "^5.12.1",
+    "react-dom": "19.2.6",
+    "stockfish": "^18.0.8",
+    "ts-fsrs": "^5.4.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "eslint": "9.39.4",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "fake-indexeddb": "^6.2.5",
+    "globals": "16.4.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.59.3",
+    "vite": "^8.2.2"
+  },
+  "type": "module"
+}

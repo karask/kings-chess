@@ -1,0 +1,21 @@
+{
+  "id": "lichess-starter-2026-08",
+  "version": 1,
+  "generatedAt": "2026-08-28T10:27:39.116Z",
+  "source": "https://database.lichess.org/lichess_db_puzzle.csv.zst",
+  "sourceSnapshot": "2026-08-02",
+  "license": "CC0-1.0",
+  "count": 3000,
+  "checksum": "sha256:94b2464985fdab237640a2e951febef51a8ded71774b8d0d538d3b6fc509dbb6",
+  "thematicCount": 600,
+  "ratingRange": [
+    800,
+    1900
+  ],
+  "filters": {
+    "minimumPopularity": 80,
+    "minimumPlays": 40,
+    "duplicatesRemoved": true
+  },
+  "rowsRead": 194275
+}

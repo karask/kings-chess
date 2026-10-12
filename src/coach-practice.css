@@ -1,0 +1,20 @@
+.coach-practice { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.3fr); align-items: start; gap: clamp(24px, 4vw, 60px); padding: 24px clamp(16px, 3vw, 46px); max-width: 1600px; margin: 0 auto; }
+.coach-practice-copy { min-width: 0; overflow-wrap: anywhere; }
+.coach-practice-copy > .eyebrow { margin-top: 22px; }
+.coach-practice-copy h2 { font-size: clamp(26px, 3vw, 40px); line-height: 1.12; margin: 10px 0 16px; }
+.coach-practice-copy p { line-height: 1.55; }
+.coach-practice-copy .feedback { margin: 18px 0; }
+.coach-practice-copy .quiet-note { font-size: 12px; }
+.coach-practice-board { min-width: 0; }
+.coach-practice-board-shell { width: var(--practice-board-size, 100%); max-width: 100%; margin: 0 auto; }
+.coach-practice-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 32px; padding-bottom: 10px; font-size: 12px; }
+.coach-practice-explanation details { margin: 16px 0; border-block-start: 1px solid var(--line, #d7d8cc); padding-top: 12px; }
+.coach-practice-explanation summary { cursor: pointer; font-weight: 600; line-height: 1.5; }
+@media (max-width: 760px) {
+  .coach-practice { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 14px 12px; }
+  .coach-practice-copy { max-height: min(32dvh, 250px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .coach-practice-copy h2 { font-size: 25px; margin: 6px 0 8px; }
+  .coach-practice-copy > .eyebrow { margin: 14px 0 6px; }
+  .coach-practice-copy p { font-size: 13px; margin: 8px 0; }
+  .coach-practice-copy > .quiet-note { display: none; }
+}

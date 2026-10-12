@@ -1,0 +1,63 @@
+/* A single playing surface: secondary tools stay out of the way. */
+.coached-page .simple-game-setup {
+  display: block;
+  max-width: 760px;
+  margin: 24px auto 0;
+}
+
+.simple-game-setup > header { margin-bottom: 26px; }
+.simple-game-setup > header h1 { margin-bottom: 12px; }
+.simple-game-setup > form { padding: clamp(20px, 4vw, 36px); }
+.simple-game-setup .coached-family-choices { gap: 8px; }
+.simple-game-setup .coached-family-choices button { min-height: 82px; }
+.simple-game-setup .coached-family-choices strong { font-size: 1.15rem; }
+.simple-game-setup .coached-family-choices span { white-space: normal; }
+.simple-game-setup .coached-actions { margin-top: 22px; }
+.simple-game-setup .primary-action { min-width: 160px; }
+.simple-game-setup .setup-reassurance {
+  max-width: 620px;
+  margin: 22px auto;
+  color: var(--muted);
+  font-size: .85rem;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.coached-game-options { border-top: 1px solid var(--line); padding-top: 16px; }
+.coached-game-options > summary,
+.coached-opening-plan > summary,
+.coached-game-details > summary {
+  color: var(--forest);
+  cursor: pointer;
+  font-size: .8rem;
+  font-weight: 650;
+  padding-block: 4px;
+}
+.coached-game-options[open] > summary { margin-bottom: 20px; }
+.coached-optional-practice { display: block; margin-top: 18px; font-size: .8rem; }
+.coached-pattern-practice { margin-top: 12px; font-size: .78rem; }
+.coached-page .assessment-detail { margin-bottom: 0; }
+.assessment-detail h4 { margin: 16px 0 4px; font-size: .8rem; }
+.coached-opening-plan,
+.coached-game-details { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.coached-game-details > .text-button { margin-top: 12px; font-size: .76rem; }
+.coached-game-details .coached-history,
+.coached-game-details .coached-ratings { margin-top: 8px; padding-top: 10px; }
+.coached-next-focus { margin: 18px 0; padding: 14px; background: var(--forest-wash); }
+.coached-next-focus > strong { color: var(--forest); font-size: .83rem; }
+.coached-next-focus > p { margin-bottom: 0; }
+.coached-summary .critical-decision > .text-button { text-align: left; white-space: normal; }
+
+@media (min-width: 881px) {
+  .coached-page .coached-panel { max-height: calc(100dvh - 176px); }
+}
+
+@media (max-width: 880px) {
+  .coached-page .simple-game-setup { margin-top: 12px; }
+  .simple-game-setup > header { margin-bottom: 20px; }
+  .simple-game-setup .coached-family-choices { gap: 4px; }
+  .simple-game-setup .coached-family-choices button { min-height: 72px; padding: 6px; }
+  .simple-game-setup .coached-family-choices span { font-size: .64rem; }
+  .coached-page .coached-panel > .coached-opening-plan,
+  .coached-page .coached-panel > .coached-game-details { margin-top: 12px; padding-top: 10px; }
+}

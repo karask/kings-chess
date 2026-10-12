@@ -1,0 +1,47 @@
+/* The game is the destination. Utilities stay out of its way. */
+.simple-app .topbar { height: 64px; grid-template-columns: 1fr auto auto; gap: 22px; padding-inline: clamp(16px, 3vw, 42px); }
+.simple-app .page-shell { min-height: calc(100dvh - 64px); padding-bottom: 0; }
+.simple-app .app-tagline { color: var(--muted); font-size: .78rem; }
+.simple-app .return-to-play { color: var(--forest); text-decoration: none; font-size: .8rem; }
+.utility-menu { position: relative; z-index: 40; }
+.utility-menu > summary { min-height: 36px; display: flex; align-items: center; padding: 7px 13px; border: 1px solid var(--line-dark); background: var(--cream); cursor: pointer; list-style: none; font-size: .8rem; font-weight: 650; }
+.utility-menu > summary::-webkit-details-marker { display: none; }
+.utility-menu > summary::after { content: "⌄"; margin-left: 10px; }
+.utility-menu[open] > summary { background: var(--forest-wash); }
+.utility-menu nav { position: absolute; top: calc(100% + 8px); right: 0; width: 205px; padding: 6px; border: 1px solid var(--line-dark); background: var(--cream); box-shadow: 0 10px 30px #17201920; }
+.utility-menu nav a { display: block; padding: 13px 10px; color: var(--ink); font-size: .84rem; text-decoration: none; }
+.utility-menu nav a:hover, .utility-menu nav a:focus-visible { background: var(--forest-wash); }
+.simple-app .coached-page { width: min(1420px, calc(100% - 32px)); }
+.simple-app .coached-panel { max-height: calc(100dvh - 154px); }
+.simple-app .settings-page { padding-top: 30px; }
+.simple-app .settings-page h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+.simple-onboarding { width: min(520px, calc(100% - 40px)); margin: 0 auto; padding: clamp(30px, 8vh, 80px) 0; }
+.simple-onboarding > .brand-mark { margin-bottom: 35px; }
+.simple-onboarding h1 { font-size: clamp(2.5rem, 8vw, 4rem); }
+.simple-onboarding > p:not(.eyebrow) { margin: 24px 0; color: var(--muted); }
+.simple-onboarding form { margin: 28px 0; padding: 24px; background: var(--cream); border: 1px solid var(--line); }
+.simple-onboarding label { display: block; margin-bottom: 10px; font-weight: 650; font-size: .88rem; }
+.simple-onboarding input { width: 100%; min-height: 44px; border: 1px solid var(--line-dark); padding: 8px 12px; background: var(--cream); }
+.simple-onboarding .primary-action { width: 100%; margin-top: 20px; }
+.simple-onboarding > small { color: var(--muted); font-size: .75rem; }
+@media (max-width: 880px) {
+  .simple-app .topbar { grid-template-columns: 1fr auto auto; gap: 8px; }
+  .simple-app .app-tagline { display: none; }
+  .simple-app .utility-menu { grid-column: 3; }
+  .simple-app .coached-page { width: calc(100% - 20px); }
+  .simple-app .coached-panel { max-height: min(25dvh, 205px); }
+  .simple-app .return-to-play { font-size: .7rem; }
+}
+@media (max-width: 380px) {
+  .simple-app .topbar { padding-inline: 10px; }
+  .simple-app .brand { gap: 7px; font-size: .83rem; }
+  .simple-app .brand-mark { width: 29px; height: 29px; }
+  .utility-menu > summary { padding-inline: 9px; }
+}
+@media (max-width: 880px) and (max-height: 700px) {
+  .simple-app .coached-panel { max-height: 20dvh; }
+}
+@media (min-width: 641px) and (max-width: 880px) and (max-height: 600px) {
+  .simple-app .topbar { height: 48px; }
+  .simple-app .coached-panel { max-height: calc(100dvh - 120px); }
+}
