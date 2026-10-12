@@ -25,8 +25,7 @@
 
 .coached-game-options { border-top: 1px solid var(--line); padding-top: 16px; }
 .coached-game-options > summary,
-.coached-opening-plan > summary,
-.coached-game-details > summary {
+.coached-opening-plan > summary {
   color: var(--forest);
   cursor: pointer;
   font-size: .8rem;
@@ -38,19 +37,51 @@
 .coached-pattern-practice { margin-top: 12px; font-size: .78rem; }
 .coached-page .assessment-detail { margin-bottom: 0; }
 .assessment-detail h4 { margin: 16px 0 4px; font-size: .8rem; }
-.coached-opening-plan,
-.coached-game-details { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
-.coached-game-details > .text-button { margin-top: 12px; font-size: .76rem; }
-.coached-game-details .coached-history,
-.coached-game-details .coached-ratings { margin-top: 8px; padding-top: 10px; }
+.coached-opening-plan { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.coached-page .coached-panel { display: flex; flex-direction: column; height: calc(100dvh - 176px); overflow: hidden; }
+.coached-coach-copy { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.coached-coach-copy > .primary-action { width: 100%; margin-top: 16px; }
+.coached-page .coached-history { flex: 0 1 auto; min-height: 0; margin-top: 10px; padding-top: 10px; }
+.coached-panel .coached-history h2 { margin: 0 0 8px; font-family: var(--sans); font-size: .82rem; font-weight: 700; }
+.coached-history-scroll { max-height: min(23dvh, 172px); overflow-y: scroll; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--line-dark) var(--cream-deep); overscroll-behavior: contain; }
+.coached-history-scroll::-webkit-scrollbar { width: 8px; }
+.coached-history-scroll::-webkit-scrollbar-track { background: var(--cream-deep); }
+.coached-history-scroll::-webkit-scrollbar-thumb { background: var(--line-dark); border: 2px solid var(--cream-deep); border-radius: 6px; }
+.coached-history table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .78rem; }
+.coached-history th, .coached-history td { padding: 5px 4px; text-align: left; border-bottom: 1px solid var(--line); }
+.coached-history thead th { color: var(--muted); font-size: .68rem; font-weight: 500; }
+.coached-history th:first-child { width: 30px; color: var(--muted); font-weight: 500; }
+.coached-history td { overflow-wrap: anywhere; }
+.coached-history .history-san { margin-right: 6px; padding: 3px 5px; border: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; border-radius: 2px; }
+.coached-history .history-san:hover, .coached-history .history-san[aria-current] { color: var(--forest); background: var(--forest-wash); }
+.coached-history .history-grade { padding: 2px 4px; border: 0; background: var(--forest-wash); color: var(--forest); font-size: .6rem; cursor: pointer; }
+.coached-history .history-empty { color: var(--muted); }
+.coached-history .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.board-move-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.coached-history p { margin: 0; color: var(--muted); font-size: .76rem; }
+.coached-board-shell { container-type: inline-size; }
+.coached-board-footer { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; margin-top: 0; padding-left: 44px; }
+.coached-history-navigation { grid-column: 2; display: flex; align-items: center; gap: 5px; }
+.coached-history-navigation button { width: 34px; height: 34px; padding: 4px; border: 1px solid var(--line-dark); background: var(--cream); color: var(--forest); font-size: 1.1rem; cursor: pointer; }
+.coached-history-navigation span { min-width: 34px; color: var(--muted); font-size: .68rem; text-align: center; font-variant-numeric: tabular-nums; }
+.coached-board-tools { grid-column: 3; display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0; }
+.coached-board-footer .coached-resign { position: relative; margin: 0; }
+.coached-board-footer .coached-resign > button { min-height: 34px; padding: 5px 7px; border: 1px solid var(--line-dark); background: var(--cream); font-size: .72rem; }
+.coached-board-menu { position: relative; }
+.coached-board-menu > summary { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line-dark); background: var(--cream); color: var(--forest); cursor: pointer; list-style: none; font: 700 24px/1 var(--sans); }
+.coached-board-menu > summary::-webkit-details-marker { display: none; }
+.coached-board-menu[open] > summary { background: var(--forest-wash); }
+.coached-board-menu-content, .coached-resign-confirm { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 60; width: min(340px, calc(100vw - 42px)); max-height: min(65dvh, 440px); overflow-y: auto; padding: 14px; border: 1px solid var(--line-dark); background: var(--cream); box-shadow: 0 10px 30px #17201930; }
+.coached-board-menu-content > button { width: 100%; padding: 10px; text-align: left; }
+.coached-board-menu-content .coached-ratings { margin-top: 8px; padding-top: 10px; font-size: .8rem; }
+.coached-board-menu-content summary { cursor: pointer; padding: 8px 10px; font-weight: 650; }
+.coached-board-menu-content p { margin: 10px 0; font-size: .76rem; line-height: 1.55; }
+.coached-resign-confirm { width: min(280px, calc(100vw - 90px)); }
+.coached-resign-confirm p { margin: 0 0 12px; font-size: .85rem; }
 .coached-next-focus { margin: 18px 0; padding: 14px; background: var(--forest-wash); }
 .coached-next-focus > strong { color: var(--forest); font-size: .83rem; }
 .coached-next-focus > p { margin-bottom: 0; }
 .coached-summary .critical-decision > .text-button { text-align: left; white-space: normal; }
-
-@media (min-width: 881px) {
-  .coached-page .coached-panel { max-height: calc(100dvh - 176px); }
-}
 
 @media (max-width: 880px) {
   .coached-page .simple-game-setup { margin-top: 12px; }
@@ -58,6 +89,28 @@
   .simple-game-setup .coached-family-choices { gap: 4px; }
   .simple-game-setup .coached-family-choices button { min-height: 72px; padding: 6px; }
   .simple-game-setup .coached-family-choices span { font-size: .64rem; }
-  .coached-page .coached-panel > .coached-opening-plan,
-  .coached-page .coached-panel > .coached-game-details { margin-top: 12px; padding-top: 10px; }
+  .coached-page .coached-panel { height: min(25dvh, 205px); }
+  .coached-opening-plan { margin-top: 12px; padding-top: 10px; }
+  .coached-page .coached-history { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-top: 8px; padding-top: 6px; }
+  .coached-panel .coached-history h2 { margin: 0; width: 52px; flex-shrink: 0; font-size: .68rem; }
+  .coached-history-scroll { flex: 1; min-width: 0; max-height: 30px; }
+  .coached-history table { font-size: .7rem; }
+  .coached-history thead { display: none; }
+  .coached-history th, .coached-history td { padding: 2px; }
+  .coached-history .history-grade { display: none; }
+  .coached-board-tools { gap: 4px; }
+}
+@container (max-width: 330px) {
+  .coached-board-footer { grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+  .coached-history-navigation { grid-column: 1 / -1; justify-self: center; }
+  .coached-board-tools { grid-column: 2; }
+}
+@media (min-width: 881px), (min-width: 641px) and (max-width: 880px) and (max-height: 600px) {
+  .coached-page .coached-layout { align-items: stretch; }
+  .simple-app .coached-page .coached-panel { align-self: stretch; height: auto; max-height: none; contain: size; }
+  .coached-page .coached-coach-copy { display: flex; flex-direction: column; }
+  .coached-page .coached-coach-copy > :not(.coached-history) { flex-shrink: 0; }
+  .coached-page .coached-history { display: flex; flex-direction: column; align-items: stretch; gap: 0; flex: 1 0 100px; }
+  .coached-panel .coached-history h2 { width: auto; margin: 0 0 8px; }
+  .coached-page .coached-history-scroll { flex: 1; min-height: 0; max-height: none; }
 }

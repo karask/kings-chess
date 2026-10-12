@@ -2,12 +2,13 @@ import { Chess, type Square } from "chess.js";
 import { Chessboard, type Arrow } from "react-chessboard";
 import { useId, useState } from "react";
 
-export function TrainingBoard({ fen, orientation, onMove, disabled = false, hintMove, arrows = [], highlightSquares = [], showKeyboardEntry = true, label = "Chess position" }: {
+export function TrainingBoard({ fen, orientation, onMove, disabled = false, hintMove, lastMove, arrows = [], highlightSquares = [], showKeyboardEntry = true, label = "Chess position" }: {
   fen: string;
   orientation: "white" | "black";
   onMove?: (uci: string) => boolean;
   disabled?: boolean;
   hintMove?: string | null;
+  lastMove?: { from: string; to: string };
   arrows?: Arrow[];
   highlightSquares?: string[];
   showKeyboardEntry?: boolean;
@@ -21,8 +22,14 @@ export function TrainingBoard({ fen, orientation, onMove, disabled = false, hint
   const keyboardMove = keyboardEntry?.fen === fen ? keyboardEntry.value : "";
   const pendingPromotion = promotion?.fen === fen ? promotion : null;
   const styles: Record<string, React.CSSProperties> = {};
-  for (const square of highlightSquares) styles[square] = { boxShadow: "inset 0 0 0 4px rgba(154,90,12,.65)" };
-  if (selected) styles[selected] = { boxShadow: "inset 0 0 0 4px #c58b36" };
+  if (lastMove) {
+    for (const square of [lastMove.from, lastMove.to]) styles[square] = {
+      backgroundImage: "linear-gradient(rgba(246,198,55,.48), rgba(246,198,55,.48))",
+      boxShadow: "inset 0 0 0 2px rgba(135,104,22,.5)",
+    };
+  }
+  for (const square of highlightSquares) styles[square] = { ...styles[square], boxShadow: "inset 0 0 0 4px rgba(154,90,12,.65)" };
+  if (selected) styles[selected] = { ...styles[selected], boxShadow: "inset 0 0 0 4px #c58b36" };
   if (hintMove) {
     styles[hintMove.slice(0, 2)] = { boxShadow: "inset 0 0 0 4px #c58b36" };
     styles[hintMove.slice(2, 4)] = { background: "#d4a85f" };
@@ -42,7 +49,8 @@ export function TrainingBoard({ fen, orientation, onMove, disabled = false, hint
   };
 
   return (
-    <div className="board-input-group" role="group" aria-label={label}>
+    <div className="board-input-group" role="group" aria-label={label} aria-describedby={lastMove ? `${keyboardId}-last-move` : undefined}>
+      {lastMove ? <span className="board-move-description" id={`${keyboardId}-last-move`}>Last opponent move: {lastMove.from} to {lastMove.to}.</span> : null}
       <div className="chessboard-frame">
         <Chessboard options={{
         id: label.replace(/\s+/g, "-").toLowerCase(),

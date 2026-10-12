@@ -55,7 +55,8 @@ There are no Today, Repertoire, Tactics, Progress, or Tabiya Sparring navigation
 - **Take back** restores your previous turn, including undoing the opponent reply and cancelling pending analysis. It autosaves without deleting saved reviews.
 - After a game, revisit at most three decisions, see one focus for the next game, and play again. **Remember for later** adds a useful decision to spaced review.
 - Optional practice is part of the playing flow: two puzzle positions, or one saved decision. It is never a compulsory daily queue. A specific puzzle motif is inferred only from verified evidence; mixed fallback practice is labeled honestly after the attempt.
-- **Game details** contains move history, PGN export, score definitions, and resignation. **Menu** contains local PGN import and Settings/Backup.
+- Move history stays visible in the coach panel. Click a move, use the left/right keys, or use the arrows below the board to browse earlier positions; viewing history never undoes a move. The opponent's last move highlights its starting and ending squares.
+- **Resign** sits below the board on the right. The adjacent **⋮** menu contains PGN export and score definitions. **Menu** contains local PGN import and Settings/Backup.
 
 The current game resumes after reload and is included in JSON backups. Export a PGN before replacing it; v1 keeps one current game, not a game archive. There is no synchronization, account, analytics, or external chess-platform dependency.
 
