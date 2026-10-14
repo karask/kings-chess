@@ -76,6 +76,32 @@ function addSimpleAssessments(game: CoachedGame): CoachedGame {
   return { ...game, assessments };
 }
 
+test("narrated tactical evidence survives local saving and lossless backup restore", async () => {
+  const game = assessed();
+  game.assessments[0].assessment.evidence = [{
+    kind: "defense", text: "The knight now guards e5.", squares: ["f3", "e5"], line: "played", ply: 1,
+    steps: [{ ply: 1, text: "Nf3 adds a defender to e5.", squares: ["f3", "e5"] }],
+  }];
+  await saveCoachedGame(game);
+  const backup = await exportBackup();
+  await clearLocalData();
+  await restoreBackup(backup);
+  assert.deepEqual((await loadCoachedGame())?.assessments, game.assessments);
+});
+
+test("saved narration rejects invalid branches, future steps, squares, and unordered steps", () => {
+  const base = { kind: "defense", text: "A checked relationship.", squares: ["f3"], line: "played", ply: 1, steps: [{ ply: 1, text: "Develops.", squares: ["f3"] }] };
+  for (const changes of [
+    { line: "unknown" }, { line: undefined }, { ply: 3 }, { ply: 0 },
+    { steps: [{ ply: 1, text: "Develops.", squares: ["z9"] }] },
+    { steps: [{ ply: 2, text: "Reply.", squares: [] }, { ply: 1, text: "Develops.", squares: [] }] },
+  ]) {
+    const game = assessed();
+    (game.assessments[0].assessment as unknown as { evidence: unknown[] }).evidence = [{ ...base, ...changes }];
+    assert.throws(() => validateCoachedGame(game), CoachedGameValidationError);
+  }
+});
+
 test("all nine authored scenarios are legal, have learner-to-move tabiyas, and match curriculum positions", () => {
   assert.equal(COACHED_SCENARIOS.length, 9);
   assert.equal(new Set(COACHED_SCENARIOS.map((scenario) => scenario.id)).size, 9);

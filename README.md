@@ -49,7 +49,7 @@ The home screen opens your current coached game automatically. For a new game, c
 There are no Today, Repertoire, Tactics, Progress, or Tabiya Sparring navigation screens. Older bookmarks lead to the game. Existing learning content, cards, attempts, review events, and backups remain intact; this redesign does not erase progress.
 
 - The viewport-fitted board stays large. Coach text is on the left on desktop and in a compact panel above it on mobile.
-- Feedback leads with a brief explanation. **Show why** explores your move and an alternative; **Try again** checks a candidate without changing the game. Further detail and engine numbers are collapsed.
+- Feedback explains a checked tactical mechanism and how an alternative addresses it when that connection is available. **Show why** narrates both continuations with highlights for the current step. **Try a different reply** lets you play for the side to move at any point, see a fresh assessment, and return to the previous explanation. Experiments never change the saved game. **Try again** checks another candidate at the original decision.
 - An **Opening guide** offers exact-position instruction when available, otherwise explicitly general family guidance—not an unsupported verdict about the current position.
 - The black/white evaluation bar follows the displayed position. Positive favors White; negative favors Black; M means forced mate. It stays hidden in after-game coaching mode.
 - **Take back** restores your previous turn, including undoing the opponent reply and cancelling pending analysis. It autosaves without deleting saved reviews.
@@ -64,7 +64,11 @@ The current game resumes after reload and is included in JSON backups. Export a 
 
 Coaching runs at full strength independently of opponent difficulty. It compares unrestricted and played-move-restricted searches with fixed budgets, and spends extra effort on large or uncertain differences. Sound off-book alternatives are not automatically mistakes.
 
-The current explanation layer verifies demonstrated mating lines, a subset of knight forks, and settled material consequences. It also uses exact authored opening instruction and separately labeled structure reminders. It cannot yet reliably explain every quiet or strategic move. An engine preference is not presented as a complete explanation, and a legal continuation is not proof that every move in it is forced.
+The explanation layer checks immediate hanging pieces, moved or captured defenders, absolute pins that prevent recapture, opened sliding-piece attacks, demonstrated forks, and concrete defensive escapes or added defenders. Harmful tactical explanations require the existing settled-material comparison; short exchanges and recovered sacrifices remain guarded. Where possible, it explains how the suggested alternative changes the specific capture threat. It also uses demonstrated mating lines, exact authored opening instruction, and separately labeled structure reminders.
+
+Walkthrough narration is attached to a specific branch and move: a fork is shown when it appears and its capture when it happens. Other steps describe visible checks, captures, castling, and promotions without inventing a strategic cause. Older saved games receive the new walkthrough explanations from their stored lines. A tested reply shows its evaluation from the moving side's perspective, because even the best defense can leave a losing position. All checks use the local engine, retain repetition history, and can be cancelled by returning to the game or changing the displayed step.
+
+This is still a limited explanation system, especially for quiet or strategic moves. A legal continuation demonstrates that line; it does not prove that every defense fails. The coach does not treat a geometric attack or a temporary material deficit alone as proof that a move is bad.
 
 Move labels use transparent centipawn-loss thresholds rather than Chess.com's proprietary system: Excellent ≤15, Good ≤50, Inaccuracy ≤100, Mistake ≤200, Blunder >200. Best is the engine's first choice; mate is handled separately, and unstable comparisons are Unrated. No Brilliant/Great labels or language-model service are used.
 
@@ -82,10 +86,9 @@ The puzzle snapshot and filters are recorded in [`public/data/puzzle-manifest.js
 
 The next development priority is validated chess reasoning, not more menus or more fluent generic prose:
 
-1. Contrast the played move with a sound alternative: what changed, what the opponent can exploit, and how the alternative addresses it.
-2. Broaden evidence to hanging pieces, pins, overloaded defenders, discovered attacks, and missed threats, with legal counterexamples and sacrifice checks.
-3. Add structure-aware teaching rules for development, king safety, fianchetto bishops, central tension, and pawn-break timing; each rule needs prerequisites and exceptions.
-4. Evaluate explanation accuracy and usefulness on fixed tactical, quiet, defensive, opening, and endgame positions. Track unsupported claims, useful coverage, and latency.
+1. Broaden the tactical comparison beyond immediate capture mechanisms to overloaded defenders, longer combinations, and competing threats, with legal counterexamples and sacrifice checks.
+2. Add structure-aware teaching rules for development, king safety, fianchetto bishops, central tension, and pawn-break timing; each rule needs prerequisites and exceptions.
+3. Expand the regression positions into an explanation-quality benchmark covering quiet, defensive, opening, and endgame decisions. Track unsupported claims, useful coverage, and latency.
 
 These are future explanation-engine improvements, not capabilities claimed by the simplified interface.
 
@@ -100,6 +103,8 @@ These are future explanation-engine improvements, not capabilities claimed by th
 - `lib/game-review.ts`: multi-game imports, legal replay, repertoire coverage, first-departure detection, and critical-moment nomination.
 - `lib/engine.ts` and `public/stockfish-engine.worker.js`: browser-only UCI engine adapter.
 - `lib/coaching.ts`: forced-root move comparisons, cautious grading, and replay-verified explanations.
+- `lib/coaching-tactics.ts`: legal capture relationships and concrete tactical causes/defenses.
+- `lib/coaching-walkthrough.ts` and `src/CoachWalkthrough.tsx`: step-specific narration and interactive comparison.
 - `lib/coached-game.ts`: opening scenarios, history-preserving full games, outcomes, PGN export, and validated autosave.
 - `lib/evaluation.ts` and `src/EvaluationBar.tsx`: White-perspective position scores and a cancellable, shared-worker evaluation rail.
 - `src/CoachedPlay.tsx` and `src/TrainingBoard.tsx`: coached-game UI and shared interactive board.

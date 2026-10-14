@@ -82,6 +82,28 @@
 .coached-next-focus > strong { color: var(--forest); font-size: .83rem; }
 .coached-next-focus > p { margin-bottom: 0; }
 .coached-summary .critical-decision > .text-button { text-align: left; white-space: normal; }
+.coach-walkthrough { min-width: 0; }
+.walkthrough-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.walkthrough-heading .eyebrow { margin: 0; }
+.walkthrough-trial-note { color: var(--muted); font-size: .76rem; }
+.coached-panel .walkthrough-outcome { padding: 10px; border: 1px solid var(--line); font-size: .8rem; line-height: 1.5; }
+.walkthrough-branches { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.walkthrough-branches button { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line-dark); color: var(--ink); background: transparent; cursor: pointer; font-size: .76rem; }
+.walkthrough-branches button[aria-pressed="true"] { border-color: var(--forest); background: var(--forest-wash); }
+.walkthrough-branches strong { font-size: .95rem; }
+.walkthrough-narration { padding: 12px; border-left: 3px solid var(--forest); background: var(--forest-wash); }
+.walkthrough-narration > strong { display: block; color: var(--forest); font-size: .88rem; }
+.coached-panel .walkthrough-narration p { margin: 7px 0 0; font-size: .85rem; line-height: 1.6; }
+.walkthrough-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0; }
+.walkthrough-controls > span { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.walkthrough-controls .secondary-action { padding: 8px 12px; }
+.coached-panel .walkthrough-hint { margin: 0 0 12px; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.walkthrough-test { width: 100%; }
+.walkthrough-detail { margin-top: 12px; font-size: .8rem; }
+.walkthrough-detail > summary { cursor: pointer; color: var(--forest); padding: 5px 0; }
+.walkthrough-detail small { display: block; color: var(--muted); line-height: 1.5; }
+.walkthrough-return { display: grid; gap: 8px; margin-top: 14px; }
+.walkthrough-return button { text-align: left; }
 
 @media (max-width: 880px) {
   .coached-page .simple-game-setup { margin-top: 12px; }

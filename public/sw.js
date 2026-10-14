@@ -1,4 +1,4 @@
-const CACHE_VERSION = "kings-study-v13-one-board-one-coach";
+const CACHE_VERSION = "kings-study-v14-explain-and-explore";
 const CORE = [
   "/",
   "/today",

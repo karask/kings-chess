@@ -1,6 +1,7 @@
 import { Chess, type Color, type Move, type PieceSymbol, type Square } from "chess.js";
 
 import { canonicalEpd, canonicalFen, moveToUci, parseUciMove } from "./chess";
+import { alternativeDefense, broaderFork, goodDefense, materialMechanisms } from "./coaching-tactics";
 import { openingRecallPrompts, type OpeningFamily } from "./curriculum";
 import { EngineCancelledError, type StockfishClient } from "./engine";
 import type { EngineAnalysis, EngineScore, EngineSearchOptions } from "./types";
@@ -9,9 +10,15 @@ export type MoveClassification =
   | "best" | "excellent" | "good" | "inaccuracy" | "mistake" | "blunder" | "unrated";
 
 export interface CoachingEvidence {
-  kind: "checkmate" | "stalemate" | "material" | "knight-fork" | "authored";
+  kind: "checkmate" | "stalemate" | "material" | "knight-fork" | "authored"
+    | "hanging-piece" | "defender" | "pin" | "discovered-attack" | "fork" | "defense";
   text: string;
   squares: string[];
+  /** Evidence belongs to one branch; a fact about a bad line is not shown on its alternative. */
+  line?: "played" | "best";
+  /** 1-based ply, after the indicated move within the branch. */
+  ply?: number;
+  steps?: { ply: number; text: string; squares: string[] }[];
 }
 
 /** Serializable: neither chess.js instances nor browser objects enter saved games. */
@@ -198,6 +205,12 @@ function verifiedKnightFork(replay: ReplayedCoachingLine, learner: Color): Coach
     kind: "knight-fork",
     text: `In the displayed continuation, ${fork.san} forks your king on ${king.square} and ${PIECE_NAMES[target.type]} on ${capture.to}. After the king responds, ${capture.san} captures the ${PIECE_NAMES[target.type]}.`,
     squares: [fork.to, king.square, capture.to],
+    line: "played",
+    ply: 2,
+    steps: [
+      { ply: 2, text: `${fork.san} checks your king on ${king.square} and attacks your ${PIECE_NAMES[target.type]} on ${capture.to} at the same time.`, squares: [fork.to, king.square, capture.to] },
+      { ply: 4, text: `${capture.san} captures the ${PIECE_NAMES[target.type]} that was the fork's second target.`, squares: [fork.to, capture.to] },
+    ],
   };
 }
 
@@ -272,6 +285,13 @@ function describeImmediateCapture(replay: ReplayedCoachingLine, learner: Color):
     : "";
 }
 
+function materialCause(replay: ReplayedCoachingLine, learner: Color, mechanisms: CoachingEvidence[]): string {
+  const mechanism = mechanisms[0];
+  if (mechanism && mechanism.kind !== "hanging-piece") return mechanism.text;
+  const capture = describeImmediateCapture(replay, learner);
+  return `${capture}${mechanism?.kind === "hanging-piece" ? " After that capture, you have no legal immediate recapture of the attacker." : ""}`;
+}
+
 export interface ExplainMoveInput {
   beforeFen: string;
   playedMove: string;
@@ -318,6 +338,7 @@ export function explainMove(input: ExplainMoveInput): MoveExplanation {
     ? `Repertoire note for your move: ${authoredPlayed}`
     : authoredBest ? `Repertoire note for ${bestSan}: ${authoredBest}` : undefined;
   const strategicContext = openingStrategicContext(input.beforeFen, input.family);
+  const defensiveBenefit = !bad && input.classification !== "unrated" ? goodDefense(input.beforeFen, playedReplay) : undefined;
   let title = label;
   let explanation = input.classification === "unrated"
     ? "The bounded searches did not produce a stable, comparable score. No reliable move-quality verdict is available; you can still inspect the legal continuations."
@@ -330,54 +351,65 @@ export function explainMove(input: ExplainMoveInput): MoveExplanation {
   if (board.isCheckmate()) {
     title = `${label} — checkmate`;
     explanation = "Your move gives checkmate: the king is in check and the opponent has no legal reply. The game is won; there is no need to compare centipawn scores.";
-    evidence.push({ kind: "checkmate", text: explanation, squares: [input.playedMove.slice(2, 4)] });
+    evidence.push({ kind: "checkmate", text: explanation, squares: [input.playedMove.slice(2, 4)], line: "played", ply: 1 });
   } else if (board.isStalemate()) {
     title = `${label} — stalemate`;
     explanation = `Your move ends the game by stalemate: the opponent has no legal move but is not in check. That is a draw.${bad ? ` The engine's alternative, ${bestSan}, retains better chances.` : " A draw can be a good result when defending."}`;
-    evidence.push({ kind: "stalemate", text: explanation, squares: [] });
+    evidence.push({ kind: "stalemate", text: explanation, squares: [], line: "played", ply: 1 });
   } else if (bad && playedReplay.legal && playedReplay.checkmated === learner) {
     title = `${label} — allows a mating line`;
     explanation = `Your move allows the displayed continuation to end in checkmate against you. Replay it to see the checks and the final position with no legal escape. ${bestSan} is the engine's stronger alternative.`;
-    evidence.push({ kind: "checkmate", text: explanation, squares: [playedReplay.moves.at(-1)!.to] });
+    evidence.push({ kind: "checkmate", text: explanation, squares: [playedReplay.moves.at(-1)!.to], line: "played", ply: playedReplay.moves.length });
   } else if (bad && bestReplay.legal && bestReplay.checkmated && bestReplay.checkmated !== learner) {
     title = `${label} — missed a mating line`;
     explanation = `${bestSan} starts the engine's displayed mating continuation. Replay the checks to see how that line ends in checkmate; your move does not retain the same demonstrated mating sequence.`;
-    evidence.push({ kind: "checkmate", text: explanation, squares: [bestReplay.moves.at(-1)!.to] });
+    evidence.push({ kind: "checkmate", text: explanation, squares: [bestReplay.moves.at(-1)!.to], line: "best", ply: bestReplay.moves.length });
   } else if (earlyMaterial) {
     const points = Math.abs(earlyMaterial.played.materialChange) / 100;
-    const concreteCapture = describeImmediateCapture(earlyMaterial.played, learner);
+    const mechanisms = materialMechanisms(input.beforeFen, earlyMaterial.played, "played");
+    const contrast = alternativeDefense(input.beforeFen, earlyMaterial.played, earlyMaterial.best);
+    const concreteCapture = materialCause(earlyMaterial.played, learner, mechanisms);
     title = `${label} — material lost in the line`;
-    explanation = `${concreteCapture ? `${concreteCapture} ` : ""}In the first ${earlyMaterial.plies} plies (individual moves) of this displayed continuation, your material balance falls by ${points} pawn-value point${points === 1 ? "" : "s"} after the captures and recaptures. Over the same ${earlyMaterial.plies} plies, the alternative starting with ${bestSan} does not show that loss. This describes the replayed exchange, not a rule that every sacrifice is bad.`;
-    evidence.push({ kind: "material", text: explanation, squares: earlyMaterial.played.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8) });
+    explanation = `${concreteCapture ? `${concreteCapture} ` : ""}In the first ${earlyMaterial.plies} plies (individual moves) of this displayed continuation, your material balance falls by ${points} pawn-value point${points === 1 ? "" : "s"} after the captures and recaptures. Over the same ${earlyMaterial.plies} plies, the alternative starting with ${bestSan} does not show that loss.${contrast ? ` ${contrast.text}` : ""} This describes the replayed exchange, not a rule that every sacrifice is bad.`;
+    evidence.push({ kind: "material", text: `After the shown exchange, your material balance has fallen by ${points} pawn-value point${points === 1 ? "" : "s"}. The alternative does not show the same loss over these ${earlyMaterial.plies} plies.`, squares: earlyMaterial.played.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8), line: "played", ply: earlyMaterial.plies }, ...mechanisms);
+    if (contrast) evidence.push(contrast);
   } else if (bad && settledForComparison(playedReplay) && settledForComparison(bestReplay) && playedReplay.materialSettled
     && playedReplay.materialChange <= -100
     && bestReplay.materialChange > playedReplay.materialChange) {
-    const fork = verifiedKnightFork(playedReplay, learner);
+    const fork = verifiedKnightFork(playedReplay, learner) ?? broaderFork(playedReplay, learner);
+    const mechanisms = fork ? [] : materialMechanisms(input.beforeFen, playedReplay, "played");
+    const contrast = alternativeDefense(input.beforeFen, playedReplay, bestReplay);
     const points = Math.abs(playedReplay.materialChange) / 100;
-    title = `${label} — ${fork ? "allows a knight fork" : "material lost in the line"}`;
-    const concreteCapture = fork?.text ?? describeImmediateCapture(playedReplay, learner);
-    explanation = `${concreteCapture ? `${concreteCapture} ` : ""}After the captures and recaptures in the displayed line, your material balance has fallen by ${points} pawn-value point${points === 1 ? "" : "s"}. The alternative line starting with ${bestSan} does not show the same material loss. This describes these continuations, not a rule that every sacrifice is bad.`;
+    title = `${label} — ${fork ? fork.kind === "knight-fork" ? "allows a knight fork" : "allows a fork" : mechanisms[0]?.kind === "pin" ? "a pinned defender cannot recapture" : mechanisms[0]?.kind === "defender" ? "a defender is removed" : "material lost in the line"}`;
+    const concreteCapture = fork?.text ?? materialCause(playedReplay, learner, mechanisms);
+    explanation = `${concreteCapture ? `${concreteCapture} ` : ""}After the captures and recaptures in the displayed line, your material balance has fallen by ${points} pawn-value point${points === 1 ? "" : "s"}. The alternative line starting with ${bestSan} does not show the same material loss.${contrast ? ` ${contrast.text}` : ""} This describes these continuations, not a rule that every sacrifice is bad.`;
     if (fork) evidence.push(fork);
-    evidence.push({ kind: "material", text: `Material change in the displayed line: ${playedReplay.materialChange / 100} pawn-value points (pawn 1, knight/bishop 3, rook 5, queen 9).`, squares: playedReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8) });
+    evidence.push({ kind: "material", text: `Material change in the displayed line: ${playedReplay.materialChange / 100} pawn-value points (pawn 1, knight/bishop 3, rook 5, queen 9).`, squares: playedReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8), line: "played", ply: playedReplay.moves.length }, ...mechanisms);
+    if (contrast) evidence.push(contrast);
   } else if (bad && settledForComparison(bestReplay) && settledForComparison(playedReplay) && bestReplay.materialSettled
     && bestReplay.materialChange >= 100 && bestReplay.materialChange > playedReplay.materialChange) {
     title = `${label} — missed material in the line`;
     explanation = `The continuation starting with ${bestSan} improves your material balance by ${bestReplay.materialChange / 100} pawn-value points after the displayed captures and recaptures. Your line does not achieve the same gain. Replay both lines to compare what can be taken safely in those continuations.`;
-    evidence.push({ kind: "material", text: explanation, squares: bestReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8) });
+    evidence.push({ kind: "material", text: explanation, squares: bestReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8), line: "best", ply: bestReplay.moves.length }, ...materialMechanisms(input.beforeFen, bestReplay, "best"));
   } else if (!bad && input.classification !== "unrated" && playedReplay.legal
     && playedReplay.checkmated && playedReplay.checkmated !== learner) {
     title = `${label} — a mating continuation`;
     explanation = "Your move leads to checkmate in the displayed engine continuation. Replay the line to see the checks and the final position where the opponent has no legal escape.";
-    evidence.push({ kind: "checkmate", text: explanation, squares: [playedReplay.moves.at(-1)!.to] });
+    evidence.push({ kind: "checkmate", text: explanation, squares: [playedReplay.moves.at(-1)!.to], line: "played", ply: playedReplay.moves.length });
   } else if (!bad && input.classification !== "unrated" && playedReplay.legal
     && playedReplay.materialSettled && playedReplay.materialChange >= 100) {
+    const mechanisms = materialMechanisms(input.beforeFen, playedReplay, "played");
     title = `${label} — material gained in the line`;
-    explanation = `After the captures and recaptures in the displayed continuation, your material balance improves by ${playedReplay.materialChange / 100} pawn-value points. That is a concrete benefit you can replay on the board. Material is one part of the position; the move rating also uses the engine's overall evaluation.`;
-    evidence.push({ kind: "material", text: explanation, squares: playedReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8) });
+    explanation = `${mechanisms[0] ? `${mechanisms[0].text} ` : ""}After the captures and recaptures in the displayed continuation, your material balance improves by ${playedReplay.materialChange / 100} pawn-value points. That is a concrete benefit you can replay on the board. Material is one part of the position; the move rating also uses the engine's overall evaluation.`;
+    evidence.push({ kind: "material", text: `After the shown captures and recaptures, your material balance improves by ${playedReplay.materialChange / 100} pawn-value points.`, squares: playedReplay.moves.filter((move) => move.captured).map((move) => move.to).slice(0, 8), line: "played", ply: playedReplay.moves.length }, ...mechanisms);
+  } else if (defensiveBenefit) {
+    title = `${label} — a useful defensive move`;
+    explanation = defensiveBenefit.text;
+    evidence.push(defensiveBenefit);
   } else if (!bad && input.classification !== "unrated" && authoredPlayed) {
     title = `${label} — repertoire idea`;
     explanation = `In this exact repertoire position: ${authoredPlayed} The move rating is based on engine comparison, not on matching a memorized answer.`;
-    evidence.push({ kind: "authored", text: authoredPlayed, squares: [input.playedMove.slice(0, 2), input.playedMove.slice(2, 4)] });
+    evidence.push({ kind: "authored", text: authoredPlayed, squares: [input.playedMove.slice(0, 2), input.playedMove.slice(2, 4)], line: "played", ply: 1 });
   } else if (input.bestScore?.type === "mate" && input.bestScore.value < 0
     && input.playedScore?.type === "mate" && input.playedScore.value < 0) {
     explanation = "Both searches already report a forced mate against you. A negative score in a lost position does not make every defensive move a new blunder. Compare the legal lines to find the most resistant defense.";

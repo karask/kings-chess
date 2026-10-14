@@ -322,9 +322,27 @@ function validateAssessment(value: unknown, board: Chess, playedMove: string): v
   if (!Array.isArray(assessment.evidence) || assessment.evidence.length > 8) fail("Invalid coaching evidence.");
   for (const item of assessment.evidence) {
     const evidence = record(item, "coaching evidence");
-    if (!oneOf(evidence.kind, ["checkmate", "stalemate", "material", "knight-fork", "authored"])) fail("Invalid evidence kind.");
+    if (!oneOf(evidence.kind, ["checkmate", "stalemate", "material", "knight-fork", "authored", "hanging-piece", "defender", "pin", "discovered-attack", "fork", "defense"])) fail("Invalid evidence kind.");
     shortString(evidence.text, "evidence text");
     if (!Array.isArray(evidence.squares) || evidence.squares.length > 64 || evidence.squares.some((square) => typeof square !== "string" || !/^[a-h][1-8]$/.test(square))) fail("Invalid evidence squares.");
+    if (evidence.line !== undefined && !oneOf(evidence.line, ["played", "best"])) fail("Invalid evidence line.");
+    const evidenceLine = evidence.line === "best" ? assessment.bestLine : assessment.playedLine;
+    function validateStepPly(ply: unknown) {
+      if (evidence.line === undefined || !Number.isInteger(ply) || (ply as number) < 1 || (ply as number) > (evidenceLine as unknown[]).length) fail("Invalid evidence step.");
+    }
+    if (evidence.ply !== undefined) validateStepPly(evidence.ply);
+    if (evidence.steps !== undefined) {
+      if (!Array.isArray(evidence.steps) || evidence.steps.length > 8) fail("Invalid evidence steps.");
+      let previousPly = 0;
+      for (const value of evidence.steps) {
+        const step = record(value, "evidence step");
+        validateStepPly(step.ply);
+        if ((step.ply as number) <= previousPly) fail("Evidence steps must be in move order.");
+        previousPly = step.ply as number;
+        shortString(step.text, "evidence step text");
+        if (!Array.isArray(step.squares) || step.squares.length > 64 || step.squares.some((square) => typeof square !== "string" || !/^[a-h][1-8]$/.test(square))) fail("Invalid evidence step squares.");
+      }
+    }
   }
 }
 

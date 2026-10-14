@@ -3,7 +3,9 @@ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, 
 import { TrainingBoard } from "./TrainingBoard";
 import { EvaluationBar } from "./EvaluationBar";
 import { StockfishClient } from "../lib/engine";
-import { assessMove, type MoveAssessment } from "../lib/coaching";
+import { assessMove, explainMove, type MoveAssessment } from "../lib/coaching";
+import { buildCoachingWalkthrough } from "../lib/coaching-walkthrough";
+import { CoachWalkthrough } from "./CoachWalkthrough";
 import {
   COACHED_SCENARIOS, appendGameMove, createCoachedGame, gameBoard, gamePgn,
   gameResult, loadCoachedGame, opponentBookMove, saveCoachedGame, canTakeBack, takeBackTurn, type CoachedGame,
@@ -15,7 +17,12 @@ import { flushPendingSaves } from "../lib/save-guard";
 import "./coached-simple.css";
 
 type Decision = CoachedGame["assessments"][number];
-type Exploration = { decision: Decision; line: "played" | "best"; step: number };
+type Exploration = {
+  decision: Decision; line: "played" | "best"; step: number;
+  /** Full game history before an experimental move, including earlier branches. */
+  prefix?: string[];
+  parent?: Exploration;
+};
 export type CoachedSetupDraft = Pick<CoachedGame, "family" | "scenarioId" | "startMode" | "skillLevel" | "coaching">;
 const BAD_MOVES = new Set(["inaccuracy", "mistake", "blunder"]);
 const PRACTICE_EVIDENCE = new Set(["knight-fork", "checkmate", "material"]);
@@ -103,17 +110,21 @@ function BoardMenu({ game }: { game: CoachedGame }) {
   </details>;
 }
 
-function Assessment({ assessment }: { assessment: MoveAssessment }) {
+function Assessment({ assessment: savedAssessment, family }: { assessment: MoveAssessment; family: OpeningFamily }) {
+  const assessment = useMemo(() => ({ ...savedAssessment, ...explainMove({ ...savedAssessment, family }) }), [savedAssessment, family]);
   const scoreText = (score: MoveAssessment["bestScore"]) => !score ? "Unavailable" : score.type === "mate" ? `Mate ${score.value > 0 ? "for you" : "against you"} in ${Math.abs(score.value)}` : `${score.value >= 0 ? "+" : ""}${(score.value / 100).toFixed(2)}`;
   // Lead with one authored sentence, without clipping chess notation or inventing
   // a shorter causal claim. The complete explanation remains one disclosure away.
   const sentenceEnd = assessment.explanation.search(/[.!?](?=\s+[A-Z])/);
-  const brief = assessment.explanation.length > 180 && sentenceEnd >= 0
-    ? assessment.explanation.slice(0, sentenceEnd + 1) : assessment.explanation;
+  const mechanism = assessment.evidence.find((item) => item.line === "played" && ["hanging-piece", "defender", "pin", "discovered-attack", "fork", "knight-fork", "defense"].includes(item.kind));
+  const alternative = assessment.evidence.find((item) => item.line === "best" && item.kind === "defense");
+  const brief = mechanism?.text ?? (assessment.explanation.length > 180 && sentenceEnd >= 0
+    ? assessment.explanation.slice(0, sentenceEnd + 1) : assessment.explanation);
   return <div className={`move-assessment grade-${assessment.classification}`}>
     <div className="assessment-heading"><span className="move-grade">{assessment.classification}</span><strong>{assessment.playedSan}</strong></div>
     {assessment.title.toLowerCase() !== assessment.classification ? <h3>{assessment.title}</h3> : null}
     <p>{brief}</p>
+    {alternative ? <p className="assessment-alternative"><strong>Why {assessment.bestSan} helps:</strong> {alternative.text}</p> : null}
     {assessment.confidence === "limited" ? <small>A concrete explanation has not yet been established; this is a bounded engine assessment.</small> : null}
     <details className="assessment-detail"><summary>More context & analysis</summary>
       {brief !== assessment.explanation ? <p>{assessment.explanation}</p> : null}
@@ -188,6 +199,9 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   const [retry, setRetry] = useState<Decision | null>(null);
   const [retryAssessment, setRetryAssessment] = useState<MoveAssessment | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
+  const [variationInput, setVariationInput] = useState(false);
+  const [variationBusy, setVariationBusy] = useState(false);
+  const [variationMove, setVariationMove] = useState<string | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [resignConfirm, setResignConfirm] = useState(false);
@@ -198,6 +212,7 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   const advanceController = useRef<AbortController | null>(null);
   const evaluationController = useRef<AbortController | null>(null);
   const retryController = useRef<AbortController | null>(null);
+  const variationController = useRef<AbortController | null>(null);
   const saveQueue = useRef(Promise.resolve());
   const saveFailed = useRef(false);
   const boardShell = useRef<HTMLDivElement>(null);
@@ -216,7 +231,7 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
     void loadCoachedGame().then((saved) => { if (live) { gameRef.current = saved; setGame(saved); } }).catch((error: unknown) => {
       if (live) setStorageFault(error instanceof Error ? error.message : "Could not restore your game. Your training data has not been changed.");
     }).finally(() => { if (live) setLoaded(true); });
-    return () => { live = false; advanceController.current?.abort(); retryController.current?.abort(); engine.current?.dispose(); engine.current = null; };
+    return () => { live = false; advanceController.current?.abort(); retryController.current?.abort(); variationController.current?.abort(); engine.current?.dispose(); engine.current = null; };
   }, []);
 
   const board = useMemo(() => game ? gameBoard(game) : null, [game]);
@@ -230,6 +245,22 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   const isExploring = Boolean(exploration);
   const isRetrying = Boolean(retry);
   const isBrowsing = historyPly !== null;
+  const explorationAssessment = exploration?.decision.assessment;
+  const explorationLine = exploration?.line;
+  const explorationFamily = game?.family;
+  // Rebuild explanations from stored legal lines, so older games gain the new
+  // teaching layer without rewriting the learner's saved game or reviews.
+  const teachingAssessment = useMemo(() => explorationAssessment && explorationFamily ? {
+    ...explorationAssessment, ...explainMove({ ...explorationAssessment, family: explorationFamily }),
+  } : undefined, [explorationAssessment, explorationFamily]);
+  const walkthrough = useMemo(() => teachingAssessment && explorationLine ? buildCoachingWalkthrough(teachingAssessment, explorationLine) : [], [teachingAssessment, explorationLine]);
+  const variationHistory = useMemo(() => {
+    if (!game || !exploration || !walkthrough.length) return null;
+    const moves = [...(exploration.prefix ?? game.moves.slice(0, exploration.decision.ply - 1)), ...walkthrough.slice(1, exploration.step + 1).map((frame) => frame.move!)];
+    const board = new Chess(game.initialFen);
+    for (const move of moves) board.move(parseUciMove(move));
+    return { moves, board };
+  }, [game, exploration, walkthrough]);
 
   useEffect(() => {
     if (!game || showSetup || exploration || retry || isBrowsing || engineFault || game.resigned) return;
@@ -299,9 +330,11 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
     advanceController.current?.abort();
     evaluationController.current?.abort();
     retryController.current?.abort();
+    variationController.current?.abort();
     engine.current?.stop();
     setActivity("");
     setRetryBusy(false);
+    setVariationInput(false); setVariationBusy(false); setVariationMove(null);
     setEvaluationGeneration((value) => value + 1);
   }, []);
 
@@ -315,15 +348,15 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   const stepMove = useCallback((direction: -1 | 1) => {
     if (!game || retry) return;
     if (exploration) {
-      const limit = exploration.decision.assessment[exploration.line === "best" ? "bestLine" : "playedLine"].length;
+      const limit = Math.max(0, walkthrough.length - 1);
       const step = Math.max(0, Math.min(limit, exploration.step + direction));
-      if (step !== exploration.step) setExploration({ ...exploration, step });
+      if (step !== exploration.step) { cancelSearches(); setExploration({ ...exploration, step }); }
       return;
     }
     const current = historyPly ?? game.moves.length;
     const next = Math.max(0, Math.min(game.moves.length, current + direction));
     if (next !== current) viewMove(next);
-  }, [game, retry, exploration, historyPly, viewMove]);
+  }, [game, retry, exploration, historyPly, viewMove, cancelSearches, walkthrough]);
 
   useEffect(() => {
     if (!loaded || showSetup || !game) return;
@@ -387,8 +420,38 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   }
 
   function returnToGame() {
-    evaluationController.current?.abort(); retryController.current?.abort(); setRetryBusy(false); setHistoryPly(null); setRetry(null); setRetryAssessment(null); setExploration(null); setNotice("");
-    setEvaluationGeneration((value) => value + 1);
+    cancelSearches(); setHistoryPly(null); setRetry(null); setRetryAssessment(null); setExploration(null); setNotice("");
+  }
+
+  function changeExploration(next: Exploration) {
+    cancelSearches(); setNotice(""); setExploration(next);
+  }
+
+  function tryVariation(uci: string): boolean {
+    if (!game || !exploration || !variationHistory || !variationInput || variationBusy) return false;
+    const prefix = [...variationHistory.moves];
+    const position = new Chess(game.initialFen);
+    try {
+      for (const move of prefix) position.move(parseUciMove(move));
+      if (position.isGameOver()) return false;
+      position.move(parseUciMove(uci));
+    } catch { setNotice("That reply is not legal here. Try another move."); return false; }
+    evaluationController.current?.abort(); variationController.current?.abort();
+    const controller = new AbortController();
+    variationController.current = controller;
+    engine.current ??= new StockfishClient();
+    setVariationBusy(true); setVariationMove(uci); setNotice("");
+    const parent = exploration;
+    void assessMove(engine.current, { initialFen: game.initialFen, moves: prefix, playedMove: uci, family: game.family, signal: controller.signal }).then((assessment) => {
+      if (controller.signal.aborted) return;
+      setExploration({ decision: { ply: prefix.length + 1, assessment }, prefix, parent, line: "played", step: 1 });
+      setVariationInput(false);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : "Could not check this reply. Try again.");
+    }).finally(() => {
+      if (!controller.signal.aborted) { setVariationBusy(false); setVariationMove(null); }
+    });
+    return true;
   }
 
   async function saveDecision(decision: Decision) {
@@ -415,11 +478,12 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
   const decision = exploration?.decision ?? retry ?? (isBrowsing ? [...game.assessments].reverse().find((item) => item.ply <= viewedPly) : latest);
   const visibleFeedback = game.coaching !== "after" || Boolean(result);
   const actualFen = board!.fen();
-  const replayLine = exploration ? exploration.decision.assessment[exploration.line === "best" ? "bestLine" : "playedLine"] : [];
+  const replayLine = walkthrough.slice(1).map((frame) => frame.move!);
   const replay = exploration ? linePosition(exploration.decision.assessment.beforeFen, replayLine, exploration.step) : null;
-  const displayedFen = retry ? retryAssessment ? linePosition(retry.assessment.beforeFen, [retryAssessment.playedMove], 1).fen : retry.assessment.beforeFen : replay?.fen ?? (isBrowsing ? moveHistory[viewedPly - 1]?.after ?? game.initialFen : actualFen);
-  const displayedMoves = retry ? [...game.moves.slice(0, retry.ply - 1), ...(retryAssessment ? [retryAssessment.playedMove] : [])] : exploration ? [...game.moves.slice(0, exploration.decision.ply - 1), ...replayLine.slice(0, exploration.step)] : game.moves.slice(0, viewedPly);
-  const nextArrow = exploration ? replayLine[exploration.step] : undefined;
+  const narratedStep = walkthrough[Math.min(exploration?.step ?? 0, walkthrough.length - 1)];
+  const displayedFen = variationMove && replay ? linePosition(replay.fen, [variationMove], 1).fen : retry ? retryAssessment ? linePosition(retry.assessment.beforeFen, [retryAssessment.playedMove], 1).fen : retry.assessment.beforeFen : replay?.fen ?? (isBrowsing ? moveHistory[viewedPly - 1]?.after ?? game.initialFen : actualFen);
+  const displayedMoves = retry ? [...game.moves.slice(0, retry.ply - 1), ...(retryAssessment ? [retryAssessment.playedMove] : [])] : exploration ? [...(variationHistory?.moves ?? []), ...(variationMove ? [variationMove] : [])] : game.moves.slice(0, viewedPly);
+  const nextArrow = exploration && !variationInput ? replayLine[exploration.step] : undefined;
   const lastOpponentMove = !exploration && !retry ? [...moveHistory.slice(0, viewedPly)].reverse().find((move) => move.color !== game.learnerColor) : undefined;
   const baseOrientation = game.learnerColor === "w" ? "white" : "black";
   const orientation = flipped ? baseOrientation === "white" ? "black" : "white" : baseOrientation;
@@ -441,9 +505,9 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
         <div className="coached-coach-copy">
         <div className="coached-status" role="status">{retry ? "Practice candidate · your game is unchanged" : exploration ? "Exploring a variation · your game is unchanged" : isBrowsing ? `${viewedPly ? `After ${moveHistory[viewedPly - 1].san}` : "Starting position"} · viewing move history` : activity || result || (paused ? "Coach paused · continue when ready" : engineFault ? "Engine paused" : "Your move")}</div>
         {engineFault ? <div className="feedback error" role="alert"><strong>Engine unavailable</strong><p>{engineFault}</p><button className="secondary-action" onClick={() => { engine.current?.dispose(); engine.current = null; setEngineFault(""); }}>Retry engine</button>{pendingAssessment ? <button className="text-button" onClick={() => { setEngineFault(""); commit({ ...game, skippedAssessmentPlies: [...(game.skippedAssessmentPlies ?? []), lastPly] }); }}>Skip coaching for this move</button> : null}</div> : null}
-        {retry ? <><h2>Find another candidate.</h2><p>Play a move on the board. The coach checks it independently—sound alternatives count.</p>{retryBusy ? <p role="status">Checking your candidate…</p> : retryAssessment ? <Assessment assessment={retryAssessment} /> : null}{retryAssessment ? <div className="coached-actions"><button className="text-button" onClick={() => setRetryAssessment(null)}>Try another candidate</button><button className="secondary-action" onClick={() => { setExploration({ decision: { ply: retry.ply, assessment: retryAssessment }, line: "played", step: 0 }); setRetry(null); }}>Show candidate line</button></div> : null}<button className="secondary-action" onClick={returnToGame}>Return to game</button></> : <>
-          {visibleFeedback && decision && (!result || exploration || isBrowsing) ? <><Assessment assessment={decision.assessment} />{!exploration ? <div className="coached-actions"><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); setExploration({ decision, line: "played", step: 0 }); }}>Show why</button><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); setExploration(null); setRetry(decision); setRetryAssessment(null); }}>Try again</button></div> : null}</> : isBrowsing ? <div className="coached-intro"><h2>Earlier position.</h2><p>Use the arrows to browse the game. Return to the latest move to continue playing.</p></div> : !result ? <div className="coached-intro"><h2>Your move.</h2><p>{game.coaching === "after" ? "The coach will share feedback when the game ends. Take your time and play your own ideas." : "Drag a piece, or click its start and destination. I’ll explain the important moments as we play."}</p></div> : null}
-          {exploration && replay ? <div className="variation-controls"><strong>{exploration.line === "played" ? "Your move and best defense" : "Engine’s preferred continuation"}</strong><div className="coached-actions"><button aria-pressed={exploration.line === "played"} onClick={() => setExploration({ ...exploration, line: "played", step: 0 })}>Your move</button><button aria-pressed={exploration.line === "best"} onClick={() => setExploration({ ...exploration, line: "best", step: 0 })}>Alternative</button></div><p className="variation-san">{replay.sans.map((san, index) => <button key={index} aria-current={exploration.step === index + 1 ? "step" : undefined} onClick={() => setExploration({ ...exploration, step: index + 1 })}>{san}</button>)}</p><div className="coached-actions"><button disabled={exploration.step === 0} onClick={() => setExploration({ ...exploration, step: exploration.step - 1 })}>← Back</button><span>{exploration.step}/{replay.sans.length}</span><button disabled={exploration.step >= replay.sans.length} onClick={() => setExploration({ ...exploration, step: exploration.step + 1 })}>Next →</button></div><button className="text-button" onClick={returnToGame}>Return to live position</button></div> : null}
+        {retry ? <><h2>Find another candidate.</h2><p>Play a move on the board. The coach checks it independently—sound alternatives count.</p>{retryBusy ? <p role="status">Checking your candidate…</p> : retryAssessment ? <Assessment assessment={retryAssessment} family={game.family} /> : null}{retryAssessment ? <div className="coached-actions"><button className="text-button" onClick={() => setRetryAssessment(null)}>Try another candidate</button><button className="secondary-action" onClick={() => { setExploration({ decision: { ply: retry.ply, assessment: retryAssessment }, line: "played", step: 0 }); setRetry(null); }}>Show candidate line</button></div> : null}<button className="secondary-action" onClick={returnToGame}>Return to game</button></> : <>
+          {!exploration && (visibleFeedback && decision && (!result || isBrowsing) ? <><Assessment assessment={decision.assessment} family={game.family} /><div className="coached-actions"><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); changeExploration({ decision, line: "played", step: 0 }); }}>Show why</button><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); setExploration(null); setRetry(decision); setRetryAssessment(null); }}>Try again</button></div></> : isBrowsing ? <div className="coached-intro"><h2>Earlier position.</h2><p>Use the arrows to browse the game. Return to the latest move to continue playing.</p></div> : !result ? <div className="coached-intro"><h2>Your move.</h2><p>{game.coaching === "after" ? "The coach will share feedback when the game ends. Take your time and play your own ideas." : "Drag a piece, or click its start and destination. I’ll explain the important moments as we play."}</p></div> : null)}
+          {exploration && replay && teachingAssessment ? <CoachWalkthrough assessment={teachingAssessment} line={exploration.line} step={exploration.step} frames={walkthrough} sans={replay.sans} trial={Boolean(exploration.parent)} testing={variationInput} busy={variationBusy} canTest={Boolean(variationHistory && !variationHistory.board.isGameOver())} onLine={(line) => changeExploration({ ...exploration, line, step: 0 })} onStep={(step) => changeExploration({ ...exploration, step })} onTest={() => { cancelSearches(); setVariationInput(true); setNotice(""); }} onCancelTest={cancelSearches} onBack={exploration.parent ? () => changeExploration(exploration.parent!) : undefined} onReturn={returnToGame} /> : null}
           {isBrowsing ? <button className="secondary-action" onClick={() => viewMove(game.moves.length)}>Return to latest move</button> : null}
           {paused && !result && !exploration && !isBrowsing ? <button className="primary-action" onClick={() => commit({ ...game, pausedAtPly: undefined, updatedAt: new Date().toISOString() })}>Continue game<span>→</span></button> : null}
           {onPractice && !result && !exploration && decision && visibleFeedback && hasPracticePattern(decision.assessment) ? <button className="text-button coached-pattern-practice" disabled={!canExplore} onClick={() => { cancelSearches(); onPractice(decision.assessment, game.family); }}>Optional: practise this pattern →</button> : null}
@@ -457,8 +521,8 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
       <section className="coached-board-area" aria-label="Coached game board">
         <div className="coached-board-toolbar"><span>{new Chess(displayedFen).turn() === "w" ? "White" : "Black"} to move{new Chess(displayedFen).isCheck() ? " · check" : ""}{isBrowsing ? " · history" : ""}</span><div><button onClick={takeBack} disabled={!canTakeBack(game) || savingReview || Boolean(exploration || retry || isBrowsing)} title={exploration || retry || isBrowsing ? "Return to the live game to take back a move" : "Undo your last move and the computer’s reply"}>Take back</button><button onClick={() => setFlipped(!flipped)} aria-label="Rotate board">Rotate</button><button onClick={() => setKeyboard(!keyboard)} aria-pressed={keyboard}>Keyboard</button></div></div>
         <div className="coached-board-shell" ref={boardShell}>
-          <EvaluationBar history={{ initialFen: game.initialFen, moves: displayedMoves }} orientation={orientation} enabled={!engineFault && !activity && (!pendingAssessment || isBrowsing) && !retryBusy && Boolean(exploration || retry || isBrowsing || paused || result || board!.turn() === game.learnerColor)} hidden={!visibleFeedback} generation={evaluationGeneration} engineRef={engine} searchControllerRef={evaluationController} />
-          <TrainingBoard fen={displayedFen} orientation={orientation} onMove={retry ? tryCandidate : playMove} disabled={retry ? retryBusy || Boolean(retryAssessment) : Boolean(exploration || isBrowsing || activity || engineFault || paused || pendingAssessment || result || board!.turn() !== game.learnerColor)} showKeyboardEntry={keyboard} lastMove={lastOpponentMove} highlightSquares={exploration?.decision.assessment.evidence.flatMap((item) => item.squares) ?? []} arrows={nextArrow ? [{ startSquare: nextArrow.slice(0, 2), endSquare: nextArrow.slice(2, 4), color: exploration?.line === "best" ? "rgba(23,100,134,.7)" : "rgba(154,90,12,.7)" }] : []} label="Coached game" />
+          <EvaluationBar history={{ initialFen: game.initialFen, moves: displayedMoves }} orientation={orientation} enabled={!engineFault && !activity && (!pendingAssessment || isBrowsing) && !retryBusy && !variationInput && !variationBusy && Boolean(exploration || retry || isBrowsing || paused || result || board!.turn() === game.learnerColor)} hidden={!visibleFeedback} generation={evaluationGeneration} engineRef={engine} searchControllerRef={evaluationController} />
+          <TrainingBoard fen={displayedFen} orientation={orientation} onMove={exploration ? tryVariation : retry ? tryCandidate : playMove} disabled={exploration ? !variationInput || variationBusy : retry ? retryBusy || Boolean(retryAssessment) : Boolean(isBrowsing || activity || engineFault || paused || pendingAssessment || result || board!.turn() !== game.learnerColor)} showKeyboardEntry={keyboard} lastMove={lastOpponentMove} highlightSquares={variationInput ? [] : narratedStep?.squares ?? []} arrows={nextArrow ? [{ startSquare: nextArrow.slice(0, 2), endSquare: nextArrow.slice(2, 4), color: exploration?.line === "best" ? "rgba(23,100,134,.7)" : "rgba(154,90,12,.7)" }] : []} label={exploration ? "Explanation board" : "Coached game"} />
           <div className="coached-board-footer">
             <div className="coached-history-navigation" aria-label="Browse moves">
               <button aria-label="Previous move" title="Previous move (left arrow)" disabled={Boolean(retry) || navigationPly === 0} onClick={() => stepMove(-1)}>←</button>
