@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import { assetUrl } from "../lib/app-url";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { createPuzzleSession, gradePuzzleAttempt, parseUciMove, recordPuzzleHint, submitPuzzleMove } from "../lib/chess";
@@ -93,7 +94,7 @@ function PuzzlePractice({ rating, request, onClose, onRecorded, leaveRef }: {
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
-    void fetch("/data/puzzles.json", { signal: controller.signal }).then(async (response) => {
+    void fetch(assetUrl("data/puzzles.json"), { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error("The offline puzzle pack could not be opened.");
       const rows: unknown = await response.json();
       if (!Array.isArray(rows)) throw new Error("The puzzle pack is malformed.");

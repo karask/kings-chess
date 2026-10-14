@@ -1,0 +1,62 @@
+name: Validate and deploy GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+        env:
+          CHESS_BASE_PATH: /kings-chess/
+      - name: Include exact corresponding app source
+        run: git archive --format=tar.gz --output=dist/kings-chess-source.tar.gz HEAD
+      - name: Check Pages availability
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          enabled=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.has_pages')
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          if [ "$enabled" != "true" ]; then
+            echo "::notice::Build is ready. Enable GitHub Pages with GitHub Actions as its source, then rerun this workflow to publish."
+          fi
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages_enabled == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

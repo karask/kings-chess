@@ -109,7 +109,7 @@ function initialize(engineUrl) {
 
   try {
     const resolvedUrl = new URL(
-      engineUrl || "/engine/stockfish-18-lite-single.js",
+      engineUrl || "./engine/stockfish-18-lite-single.js",
       self.location.href,
     ).href;
     engine = new Worker(resolvedUrl);

@@ -40,6 +40,25 @@ npm run local
 npm run preview
 ```
 
+## GitHub Pages deployment
+
+The repository includes `.github/workflows/pages.yml`. Pushes to `master` run tests, lint and a production build for `https://karask.github.io/kings-chess/`. Publishing runs once GitHub Pages is enabled with **GitHub Actions** as the source. If Pages is unavailable, the workflow still validates and saves the ready-to-publish artifact; its deployment job is skipped. After enabling Pages, run the workflow manually once.
+
+The repository can remain private if the GitHub account's plan supports Pages for private repositories. Otherwise, publishing through Pages requires a public repository or a plan change. Enabling Pages ordinarily makes the site public.
+
+Hosted utility routes use hashes, such as `/kings-chess/#/settings`, so direct links and reloads work without a server router. Engine, puzzle, manifest and offline-cache paths follow the hosting directory. Local development continues using `/` and `/settings`.
+
+To preview the Pages build locally:
+
+```bash
+CHESS_BASE_PATH=/kings-chess/ npm run build
+CHESS_BASE_PATH=/kings-chess/ npm run preview
+```
+
+Open `http://localhost:4173/kings-chess/`. For a regular local build, run `npm run build` without the variable. The Pages artifact includes `kings-chess-source.tar.gz`, an archive of the exact deployed Git commit; Stockfish's separate source references and notices remain bundled.
+
+Progress belongs to the browser origin. Export a JSON backup from localhost and restore it on the hosted site to move your current game and training history.
+
 `npm run build` type-checks the project and writes a static production build to `dist/`. The production service worker makes the core app, puzzle pack, and engine available offline after one successful load. Service workers are not registered by the development server.
 
 ## One board, one coach

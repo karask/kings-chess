@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import { assetUrl } from "./app-url";
 
 import { canonicalFen, ChessDataError, moveToUci, parseUciMove } from "./chess";
 import type {
@@ -199,8 +200,8 @@ export class StockfishClient {
   private failureReason: string | null = null;
 
   constructor(options: StockfishClientOptions = {}) {
-    this.workerUrl = options.workerUrl ?? "/stockfish-engine.worker.js";
-    this.engineUrl = options.engineUrl ?? "/engine/stockfish-18-lite-single.js";
+    this.workerUrl = options.workerUrl ?? assetUrl("stockfish-engine.worker.js");
+    this.engineUrl = options.engineUrl ?? assetUrl("engine/stockfish-18-lite-single.js");
     this.initializationTimeoutMs = options.initializationTimeoutMs ?? 20_000;
   }
 

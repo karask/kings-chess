@@ -1,9 +1,10 @@
 import { Chess, type Color } from "chess.js";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { StockfishClient } from "../lib/engine";
+import { assetUrl } from "../lib/app-url";
 import { savedPracticeDecision } from "../lib/coach-practice";
 import { parseAndReviewPgn, type LocalGameReview, type ReviewCandidate } from "../lib/game-review";
-import { appViewPath, resolveAppView, type AppView } from "../lib/navigation";
+import { appViewPath, resolveAppLocation, type AppView } from "../lib/navigation";
 import { clearLocalData, exportBackup, getChessTrainerDb, getSetting, putSetting, putTrainingAttempt, restoreBackup, reviewCard } from "../lib/storage";
 import type { EngineAnalysis, JsonValue } from "../lib/types";
 import { TrainingBoard } from "./TrainingBoard";
@@ -118,13 +119,13 @@ function AppShell({ view, inPractice, onNavigate, children }: { view: AppView; i
   }
   return <div className="app-shell simple-app">
     <header className="topbar">
-      <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate("play"); }}><span className="brand-mark">K</span><span>King&apos;s Study</span></a>
-      {view !== "play" || inPractice ? <a className="return-to-play" href="/" onClick={(event) => { event.preventDefault(); navigate("play"); }}>← Back to game</a> : <span className="app-tagline">One board. Your coach.</span>}
+      <a className="brand" href={appViewPath("play")} onClick={(event) => { event.preventDefault(); navigate("play"); }}><span className="brand-mark">K</span><span>King&apos;s Study</span></a>
+      {view !== "play" || inPractice ? <a className="return-to-play" href={appViewPath("play")} onClick={(event) => { event.preventDefault(); navigate("play"); }}>← Back to game</a> : <span className="app-tagline">One board. Your coach.</span>}
       <details className="utility-menu" ref={menu}>
         <summary onKeyDown={(event) => { if (event.key === "Escape" && menu.current) menu.current.open = false; }}>Menu</summary>
         <nav aria-label="Utilities">
-          <a href="/import" onClick={(event) => { event.preventDefault(); navigate("import"); }}>Review a PGN</a>
-          <a href="/settings" onClick={(event) => { event.preventDefault(); navigate("settings"); }}>Settings &amp; backup</a>
+          <a href={appViewPath("import")} onClick={(event) => { event.preventDefault(); navigate("import"); }}>Review a PGN</a>
+          <a href={appViewPath("settings")} onClick={(event) => { event.preventDefault(); navigate("settings"); }}>Settings &amp; backup</a>
         </nav>
       </details>
     </header>
@@ -233,13 +234,13 @@ function SettingsView({ profile, offlineStatus, onProfile, onReset }: { profile:
   async function restoreFile(file?: File) { if (!file) return; try { await restoreBackup(await file.text(), { mode: "merge" }); setMessage("Backup restored. Reloading progress…"); window.setTimeout(() => window.location.reload(), 500); } catch { setMessage("That file is not a valid King's Study backup."); } }
   async function requestPersistence() { try { const granted = await navigator.storage?.persist?.(); setMessage(granted ? "Persistent storage is enabled for this browser." : "The browser kept storage in best-effort mode; keep regular backups."); } catch { setMessage("This browser could not change its storage policy."); } }
   return (
-    <section className="content-page settings-page"><header className="page-heading"><div><p className="eyebrow">ON-DEVICE BY DESIGN</p><h1>Settings & backup</h1><p>No account or synchronization. Export a backup before clearing browser data or moving devices.</p></div><div className="offline-badge"><span className={offlineStatus.online ? "online" : ""} />{!offlineStatus.online ? "Offline mode" : offlineStatus.serviceWorkerReady ? "Offline assets installed" : "Production install pending"}</div></header><div className="settings-grid"><section><p className="step-count">YOUR PREFERENCES</p><div className="setting-row"><div><strong>Rapid rating</strong><small>Starting level for optional practice</small></div><input aria-label="Rapid rating" type="number" min="600" max="2400" value={profile.rating} onChange={(event) => { const rating = Number(event.target.value); void save({ ...profile, rating, tacticsRating: rating }); }} /></div><div className="setting-row"><div><strong>Board perspective</strong><small>For imported reviews; coached games face your pieces</small></div><select aria-label="Board perspective" value={profile.orientation} onChange={(event) => void save({ ...profile, orientation: event.target.value as "white" | "black" })}><option value="white">White</option><option value="black">Black</option></select></div></section><section><p className="step-count">BACKUP & RESTORE</p><div className="backup-box"><h3>Progress is local</h3><p>The export includes review cards, immutable review events, attempts, settings, and content manifests.</p><button className="primary-action inline" onClick={() => void downloadBackup()}>Download JSON backup <span>↓</span></button><label className="secondary-action file-action">Restore or merge<input type="file" accept="application/json,.json" onChange={(event) => void restoreFile(event.target.files?.[0])} /></label></div><div className="setting-row"><div><strong>Browser storage</strong><small>{offlineStatus.persistent ? "Protected from routine browser eviction" : "Best-effort; keep JSON backups"}</small></div><button className="text-button" disabled={offlineStatus.persistent === true} onClick={() => void requestPersistence()}>{offlineStatus.persistent ? "persistent" : "request persistence"}</button></div><div className="setting-row"><div><strong>Local Stockfish 18</strong><small>Lazy, single-threaded, GPLv3</small></div><button className="text-button" disabled={engine === "checking"} onClick={() => { setEngine("checking"); const client = new StockfishClient(); client.initialize().then((ready) => { setEngine(ready ? "ready" : "unavailable"); client.dispose(); }).catch(() => setEngine("unavailable")); }}>{engine === "unchecked" ? "Check engine" : engine}</button></div></section><section className="license-panel"><p className="step-count">DATA & LICENSES</p><h3>Open, inspectable ingredients.</h3><ul><li><a href="/engine/COPYING.txt" target="_blank">Stockfish.js 18 · GPLv3</a></li><li><a href="https://database.lichess.org/#puzzles" target="_blank" rel="noreferrer">Lichess puzzle database · CC0</a></li><li><a href="/THIRD_PARTY_NOTICES.txt" target="_blank">Third-party notices</a></li></ul><button className="danger-button" onClick={() => { if (window.confirm("Delete all local training progress from this browser? Export a backup first if you may want it later.")) { clearLocalData().then(onReset).catch(() => setMessage("Local data could not be cleared.")); } }}>Clear all local data</button></section></div>{message ? <div className="toast" role="status">{message}</div> : null}</section>
+    <section className="content-page settings-page"><header className="page-heading"><div><p className="eyebrow">ON-DEVICE BY DESIGN</p><h1>Settings & backup</h1><p>No account or synchronization. Export a backup before clearing browser data or moving devices.</p></div><div className="offline-badge"><span className={offlineStatus.online ? "online" : ""} />{!offlineStatus.online ? "Offline mode" : offlineStatus.serviceWorkerReady ? "Offline assets installed" : "Production install pending"}</div></header><div className="settings-grid"><section><p className="step-count">YOUR PREFERENCES</p><div className="setting-row"><div><strong>Rapid rating</strong><small>Starting level for optional practice</small></div><input aria-label="Rapid rating" type="number" min="600" max="2400" value={profile.rating} onChange={(event) => { const rating = Number(event.target.value); void save({ ...profile, rating, tacticsRating: rating }); }} /></div><div className="setting-row"><div><strong>Board perspective</strong><small>For imported reviews; coached games face your pieces</small></div><select aria-label="Board perspective" value={profile.orientation} onChange={(event) => void save({ ...profile, orientation: event.target.value as "white" | "black" })}><option value="white">White</option><option value="black">Black</option></select></div></section><section><p className="step-count">BACKUP & RESTORE</p><div className="backup-box"><h3>Progress is local</h3><p>The export includes review cards, immutable review events, attempts, settings, and content manifests.</p><button className="primary-action inline" onClick={() => void downloadBackup()}>Download JSON backup <span>↓</span></button><label className="secondary-action file-action">Restore or merge<input type="file" accept="application/json,.json" onChange={(event) => void restoreFile(event.target.files?.[0])} /></label></div><div className="setting-row"><div><strong>Browser storage</strong><small>{offlineStatus.persistent ? "Protected from routine browser eviction" : "Best-effort; keep JSON backups"}</small></div><button className="text-button" disabled={offlineStatus.persistent === true} onClick={() => void requestPersistence()}>{offlineStatus.persistent ? "persistent" : "request persistence"}</button></div><div className="setting-row"><div><strong>Local Stockfish 18</strong><small>Lazy, single-threaded, GPLv3</small></div><button className="text-button" disabled={engine === "checking"} onClick={() => { setEngine("checking"); const client = new StockfishClient(); client.initialize().then((ready) => { setEngine(ready ? "ready" : "unavailable"); client.dispose(); }).catch(() => setEngine("unavailable")); }}>{engine === "unchecked" ? "Check engine" : engine}</button></div></section><section className="license-panel"><p className="step-count">DATA & LICENSES</p><h3>Open, inspectable ingredients.</h3><ul>{import.meta.env.BASE_URL !== "/" ? <li><a href={assetUrl("kings-chess-source.tar.gz")}>App source for this release · GPLv3+</a></li> : null}<li><a href={assetUrl("engine/COPYING.txt")} target="_blank" rel="noreferrer">Stockfish.js 18 · GPLv3</a></li><li><a href="https://database.lichess.org/#puzzles" target="_blank" rel="noreferrer">Lichess puzzle database · CC0</a></li><li><a href={assetUrl("THIRD_PARTY_NOTICES.txt")} target="_blank" rel="noreferrer">Third-party notices</a></li></ul><button className="danger-button" onClick={() => { if (window.confirm("Delete all local training progress from this browser? Export a backup first if you may want it later.")) { clearLocalData().then(onReset).catch(() => setMessage("Local data could not be cleared.")); } }}>Clear all local data</button></section></div>{message ? <div className="toast" role="status">{message}</div> : null}</section>
   );
 }
 
 export function App() {
   const offlineStatus = useOfflineStatus();
-  const [view, setView] = useState<AppView>(() => resolveAppView(window.location.pathname));
+  const [view, setView] = useState<AppView>(() => resolveAppLocation(window.location));
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -254,16 +255,16 @@ export function App() {
     let active = true;
     void getSetting<JsonValue>("profile").then((value) => { if (active) setProfile(asProfile(value)); }).finally(() => { if (active) setReady(true); }).catch(() => undefined);
     // Bookmarks to old learning pages keep working, but open the new game-first UI.
-    window.history.replaceState({}, "", appViewPath(resolveAppView(window.location.pathname)));
+    window.history.replaceState({}, "", appViewPath(resolveAppLocation(window.location)));
     const pop = () => {
-      const next = resolveAppView(window.location.pathname);
+      const next = resolveAppLocation(window.location);
       void (async () => {
         if (next === "play" && gameLeaveRef.current && !practiceLeaveRef.current) {
           window.history.replaceState({}, "", appViewPath(next));
           return;
         }
         const leave = practiceLeaveRef.current ?? gameLeaveRef.current;
-        if (leave && !await leave()) { window.history.replaceState({}, "", "/"); return; }
+        if (leave && !await leave()) { window.history.replaceState({}, "", appViewPath("play")); return; }
         window.history.replaceState({}, "", appViewPath(next));
         setView(next); setPractice(null);
       })();
@@ -277,10 +278,10 @@ export function App() {
       const path = appViewPath(next);
       // Clicking the brand on the playing screen is not a departure; avoid
       // cancelling an in-progress opponent turn for a no-op navigation.
-      if (window.location.pathname === path && !practiceLeaveRef.current) return;
+      if (`${window.location.pathname}${window.location.hash}` === path && !practiceLeaveRef.current) return;
       const leave = practiceLeaveRef.current ?? gameLeaveRef.current;
       if (leave && !await leave()) return;
-      if (window.location.pathname !== path) window.history.pushState({}, "", path);
+      if (`${window.location.pathname}${window.location.hash}` !== path) window.history.pushState({}, "", path);
       setPractice(null); setView(next); window.scrollTo({ top: 0, behavior: "instant" });
     })();
   }, []);
