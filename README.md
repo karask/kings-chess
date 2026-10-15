@@ -72,12 +72,13 @@ There are no Today, Repertoire, Tactics, Progress, or Tabiya Sparring navigation
 - An **Opening guide** offers exact-position instruction when available, otherwise explicitly general family guidance—not an unsupported verdict about the current position.
 - The black/white evaluation bar follows the displayed position. Positive favors White; negative favors Black; M means forced mate. It stays hidden in after-game coaching mode.
 - **Take back** restores your previous turn, including undoing the opponent reply and cancelling pending analysis. It autosaves without deleting saved reviews.
+- After **Try again**, play a candidate and choose **Continue from this move** to make it the live game. Any legal assessed candidate is allowed. Later moves are replaced, the computer responds, and the original line remains available through **Return to original game**. You can switch back to the revised line too; both histories survive reload and JSON backup. One original/revised pair is kept for the current game.
 - After a game, revisit at most three decisions, see one focus for the next game, and play again. **Remember for later** adds a useful decision to spaced review.
 - Optional practice is part of the playing flow: two puzzle positions, or one saved decision. It is never a compulsory daily queue. A specific puzzle motif is inferred only from verified evidence; mixed fallback practice is labeled honestly after the attempt.
 - Move history stays visible in the coach panel. Click a move, use the left/right keys, or use the arrows below the board to browse earlier positions; viewing history never undoes a move. The opponent's last move highlights its starting and ending squares.
 - **Resign** sits below the board on the right. The adjacent **⋮** menu contains PGN export and score definitions. **Menu** contains local PGN import and Settings/Backup.
 
-The current game resumes after reload and is included in JSON backups. Export a PGN before replacing it; v1 keeps one current game, not a game archive. There is no synchronization, account, analytics, or external chess-platform dependency.
+The current game and its optional saved comparison line resume after reload and are included in JSON backups. PGN export contains the currently selected line; switch lines to export the other one. Export before starting a different game, which replaces the current game and comparison pair. There is no synchronization, account, analytics, or external chess-platform dependency.
 
 ### Teaching and evidence
 

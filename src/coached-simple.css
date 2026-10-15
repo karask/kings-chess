@@ -82,6 +82,11 @@
 .coached-next-focus > strong { color: var(--forest); font-size: .83rem; }
 .coached-next-focus > p { margin-bottom: 0; }
 .coached-summary .critical-decision > .text-button { text-align: left; white-space: normal; }
+.coached-panel .retry-continuation > p { margin: 14px 0 10px; font-size: .8rem; line-height: 1.55; color: var(--muted); }
+.retry-continuation .primary-action { width: 100%; justify-content: space-between; }
+.coached-comparison { padding: 10px 12px; margin-top: 12px; border: 1px solid var(--line); background: var(--forest-wash); }
+.coached-panel .coached-comparison p { margin: 0 0 6px; font-size: .78rem; line-height: 1.5; }
+.coached-comparison button { text-align: left; font-size: .78rem; }
 .coach-walkthrough { min-width: 0; }
 .walkthrough-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .walkthrough-heading .eyebrow { margin: 0; }

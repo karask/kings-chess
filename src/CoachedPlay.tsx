@@ -6,9 +6,10 @@ import { StockfishClient } from "../lib/engine";
 import { assessMove, explainMove, type MoveAssessment } from "../lib/coaching";
 import { buildCoachingWalkthrough } from "../lib/coaching-walkthrough";
 import { CoachWalkthrough } from "./CoachWalkthrough";
+import { RetryActions } from "./RetryActions";
 import {
   COACHED_SCENARIOS, appendGameMove, createCoachedGame, gameBoard, gamePgn,
-  gameResult, loadCoachedGame, opponentBookMove, saveCoachedGame, canTakeBack, takeBackTurn, type CoachedGame,
+  gameResult, loadCoachedGame, opponentBookMove, saveCoachedGame, canTakeBack, takeBackTurn, continueFromRetry, switchSavedLine, type CoachedGame,
 } from "../lib/coached-game";
 import { openingModules, openingRecallPrompts, type OpeningFamily } from "../lib/curriculum";
 import { canonicalEpd, parseUciMove } from "../lib/chess";
@@ -423,6 +424,31 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
     cancelSearches(); setHistoryPly(null); setRetry(null); setRetryAssessment(null); setExploration(null); setNotice("");
   }
 
+  function continueCandidate() {
+    if (!game || !retry || !retryAssessment || retryBusy || savingReview) return;
+    try {
+      const next = continueFromRetry(game, retry.ply, retryAssessment);
+      returnToGame(); setEngineFault(""); setResignConfirm(false);
+      commit(next);
+      setNotice("Continuing from your new move. Your original line is saved below.");
+    } catch (error: unknown) {
+      setNotice(error instanceof Error ? error.message : "Could not continue from that move. Your game is unchanged.");
+    }
+  }
+
+  function restoreComparison() {
+    if (!game?.savedLine || savingReview) return;
+    const returningToOriginal = game.savedLine.kind === "original";
+    try {
+      const next = switchSavedLine(game);
+      returnToGame(); setEngineFault(""); setResignConfirm(false);
+      commit(next);
+      setNotice(returningToOriginal ? "Original game restored. Your revised line is still available." : "Revised game restored. Your original line is still available.");
+    } catch (error: unknown) {
+      setNotice(error instanceof Error ? error.message : "Could not restore that line. Your current game is unchanged.");
+    }
+  }
+
   function changeExploration(next: Exploration) {
     cancelSearches(); setNotice(""); setExploration(next);
   }
@@ -505,7 +531,7 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
         <div className="coached-coach-copy">
         <div className="coached-status" role="status">{retry ? "Practice candidate · your game is unchanged" : exploration ? "Exploring a variation · your game is unchanged" : isBrowsing ? `${viewedPly ? `After ${moveHistory[viewedPly - 1].san}` : "Starting position"} · viewing move history` : activity || result || (paused ? "Coach paused · continue when ready" : engineFault ? "Engine paused" : "Your move")}</div>
         {engineFault ? <div className="feedback error" role="alert"><strong>Engine unavailable</strong><p>{engineFault}</p><button className="secondary-action" onClick={() => { engine.current?.dispose(); engine.current = null; setEngineFault(""); }}>Retry engine</button>{pendingAssessment ? <button className="text-button" onClick={() => { setEngineFault(""); commit({ ...game, skippedAssessmentPlies: [...(game.skippedAssessmentPlies ?? []), lastPly] }); }}>Skip coaching for this move</button> : null}</div> : null}
-        {retry ? <><h2>Find another candidate.</h2><p>Play a move on the board. The coach checks it independently—sound alternatives count.</p>{retryBusy ? <p role="status">Checking your candidate…</p> : retryAssessment ? <Assessment assessment={retryAssessment} family={game.family} /> : null}{retryAssessment ? <div className="coached-actions"><button className="text-button" onClick={() => setRetryAssessment(null)}>Try another candidate</button><button className="secondary-action" onClick={() => { setExploration({ decision: { ply: retry.ply, assessment: retryAssessment }, line: "played", step: 0 }); setRetry(null); }}>Show candidate line</button></div> : null}<button className="secondary-action" onClick={returnToGame}>Return to game</button></> : <>
+        {retry ? <><h2>Find another candidate.</h2><p>Play a move on the board. The coach checks it independently—sound alternatives count.</p>{retryBusy ? <p role="status">Checking your candidate…</p> : retryAssessment ? <Assessment assessment={retryAssessment} family={game.family} /> : null}{retryAssessment ? <RetryActions assessment={retryAssessment} laterPlies={game.moves.length - retry.ply} disabled={retryBusy || savingReview} onContinue={continueCandidate} onTryAnother={() => setRetryAssessment(null)} onShowLine={() => { setExploration({ decision: { ply: retry.ply, assessment: retryAssessment }, line: "played", step: 0 }); setRetry(null); }} /> : null}<button className="secondary-action" onClick={returnToGame}>Return to original game</button></> : <>
           {!exploration && (visibleFeedback && decision && (!result || isBrowsing) ? <><Assessment assessment={decision.assessment} family={game.family} /><div className="coached-actions"><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); changeExploration({ decision, line: "played", step: 0 }); }}>Show why</button><button className="secondary-action" disabled={!canExplore} onClick={() => { setHistoryPly(null); setExploration(null); setRetry(decision); setRetryAssessment(null); }}>Try again</button></div></> : isBrowsing ? <div className="coached-intro"><h2>Earlier position.</h2><p>Use the arrows to browse the game. Return to the latest move to continue playing.</p></div> : !result ? <div className="coached-intro"><h2>Your move.</h2><p>{game.coaching === "after" ? "The coach will share feedback when the game ends. Take your time and play your own ideas." : "Drag a piece, or click its start and destination. I’ll explain the important moments as we play."}</p></div> : null)}
           {exploration && replay && teachingAssessment ? <CoachWalkthrough assessment={teachingAssessment} line={exploration.line} step={exploration.step} frames={walkthrough} sans={replay.sans} trial={Boolean(exploration.parent)} testing={variationInput} busy={variationBusy} canTest={Boolean(variationHistory && !variationHistory.board.isGameOver())} onLine={(line) => changeExploration({ ...exploration, line, step: 0 })} onStep={(step) => changeExploration({ ...exploration, step })} onTest={() => { cancelSearches(); setVariationInput(true); setNotice(""); }} onCancelTest={cancelSearches} onBack={exploration.parent ? () => changeExploration(exploration.parent!) : undefined} onReturn={returnToGame} /> : null}
           {isBrowsing ? <button className="secondary-action" onClick={() => viewMove(game.moves.length)}>Return to latest move</button> : null}
@@ -514,6 +540,10 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
           {result && !pendingAssessment && !exploration ? <div className="coached-summary"><h2>{result}</h2><p>{important.length ? "A few moments worth learning from:" : "No clear mistake was identified in the completed checks. You can explore your decisions in Move history."}</p>{important.map((item) => <div className="critical-decision" key={item.ply}><button className="text-button" onClick={() => { setExploration(null); setRetry(item); setRetryAssessment(null); }}>{item.assessment.playedSan} · {item.assessment.classification} · try again →</button><button className="text-button" disabled={savingReview || game.reviewSavedPlies?.includes(item.ply) || (game.reviewSavedPlies?.length ?? 0) >= 3} onClick={() => void saveDecision(item)}>{game.reviewSavedPlies?.includes(item.ply) ? "Remembered" : "Remember for later"}</button></div>)}<div className="coached-next-focus"><strong>One focus for your next game</strong><p>{nextGameFocus(important[0])}</p></div><div className="coached-actions"><button className="primary-action" disabled={savingReview} onClick={() => { returnToGame(); setShowSetup(true); }}>Play again<span>→</span></button>{onPractice && important[0] && hasPracticePattern(important[0].assessment) ? <button className="secondary-action" disabled={savingReview} onClick={() => { cancelSearches(); onPractice(important[0].assessment, game.family); }}>Practise this mistake</button> : null}</div></div> : null}
         </>}
         {notice ? <p role="status" className="coach-notice">{notice}</p> : null}
+        {game.savedLine && !retry && !exploration && !isBrowsing ? <section className="coached-comparison" aria-label="Saved game line">
+          <p>{game.savedLine.kind === "original" ? "Playing your revised line. Your original game is saved." : "Viewing your original game. Your revised line is saved."}</p>
+          <button className="text-button" disabled={savingReview} onClick={restoreComparison}>{game.savedLine.kind === "original" ? "Return to original game" : "Return to revised game"}</button>
+        </section> : null}
         {visibleFeedback && !retry && !result ? <details className="coached-opening-plan"><summary>{exactLesson ? "Opening plan for this position" : "Your opening guide"}</summary>{exactLesson ? <p>{exactLesson.explanation}</p> : <><p className="quiet-note">General {game.family.toUpperCase()} guidance — not an assessment of this position.</p><p>{familyGuide.promise}</p><p>{familyGuide.honestLimits[0]}</p></>}</details> : null}
         <MoveHistory game={game} moves={moveHistory} visibleFeedback={visibleFeedback} canExplore={canExplore && !retryBusy} viewedPly={viewedPly} onView={viewMove} onExplore={(item) => { returnToGame(); setExploration({ decision: item, line: "played", step: 0 }); }} />
         </div>

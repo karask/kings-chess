@@ -25,6 +25,8 @@ export interface CoachedGame {
   createdAt: string;
   updatedAt: string;
   resigned?: boolean;
+  /** One reversible comparison line; snapshots cannot contain further saved lines. */
+  savedLine?: { kind: "original" | "alternative"; game: Omit<CoachedGame, "savedLine"> };
 }
 
 export interface CoachedScenario {
@@ -244,6 +246,46 @@ export function takeBackTurn(game: CoachedGame): CoachedGame {
   return next;
 }
 
+function lineSnapshot(game: CoachedGame): Omit<CoachedGame, "savedLine"> {
+  const snapshot = { ...game };
+  delete snapshot.savedLine;
+  return snapshot;
+}
+
+/** Replace a learner decision using its checked candidate, preserving full history. */
+export function continueFromRetry(game: CoachedGame, ply: number, assessment: MoveAssessment): CoachedGame {
+  validateCoachedGame(game);
+  if (!Number.isInteger(ply) || ply < 1 || ply > game.moves.length) fail("Choose an existing learner decision.");
+  const prefix = game.moves.slice(0, ply - 1);
+  const before = replay(game.initialFen, prefix);
+  if (before.turn() !== game.learnerColor || before.isGameOver()) fail("Choose a live learner decision.");
+  validateAssessment(assessment, before, assessment.playedMove);
+  const next: CoachedGame = {
+    ...game,
+    id: makeGameId(),
+    moves: [...prefix, assessment.playedMove],
+    assessments: [...game.assessments.filter((entry) => entry.ply < ply), { ply, assessment }],
+    reviewSavedPlies: game.reviewSavedPlies?.filter((entry) => entry < ply),
+    skippedAssessmentPlies: game.skippedAssessmentPlies?.filter((entry) => entry < ply),
+    savedLine: game.savedLine?.kind === "original" ? game.savedLine : { kind: "original", game: lineSnapshot(game) },
+    updatedAt: new Date().toISOString(),
+  };
+  delete next.pausedAtPly;
+  delete next.resigned;
+  return validateCoachedGame(next);
+}
+
+/** Swap the two playable lines, retaining progress made in either one. */
+export function switchSavedLine(game: CoachedGame): CoachedGame {
+  validateCoachedGame(game);
+  if (!game.savedLine) return game;
+  return validateCoachedGame({
+    ...game.savedLine.game,
+    savedLine: { kind: game.savedLine.kind === "original" ? "alternative" : "original", game: lineSnapshot(game) },
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 /** Book replies are available only in positions actually reached by this line. */
 export function opponentBookMove(game: CoachedGame): string | null {
   const board = gameBoard(game);
@@ -353,7 +395,7 @@ export function validateCoachedGame(value: unknown): CoachedGame {
   let nodes = 0;
   function boundJson(item: unknown, depth: number): void {
     nodes += 1;
-    if (nodes > 120_000 || depth > 12) fail("Saved game is too large.");
+    if (nodes > 240_000 || depth > 12) fail("Saved game is too large.");
     if (typeof item === "number" && !Number.isFinite(item)) fail("Saved game contains a non-finite number.");
     if (typeof item === "string" && item.length > 4096) fail("Saved game contains oversized text.");
     if (item === undefined) return;
@@ -409,6 +451,17 @@ export function validateCoachedGame(value: unknown): CoachedGame {
     if (field === "reviewSavedPlies" && list.some((ply) => !assessments.has(ply))) fail("Saved reviews must refer to assessed moves.");
   }
   if (game.resigned !== undefined && typeof game.resigned !== "boolean") fail("Invalid resignation status.");
+  if (game.savedLine !== undefined) {
+    const saved = record(game.savedLine, "saved comparison line");
+    if (!oneOf(saved.kind, ["original", "alternative"])) fail("Invalid saved line kind.");
+    const snapshot = record(saved.game, "saved line game");
+    if (snapshot.savedLine !== undefined) fail("Saved comparison lines cannot be nested.");
+    if (snapshot.id === game.id) fail("Comparison lines must have distinct identities.");
+    for (const field of ["family", "scenarioId", "startMode", "initialFen", "learnerColor", "createdAt"]) {
+      if (snapshot[field] !== game[field]) fail("Saved comparison line belongs to another game.");
+    }
+    validateCoachedGame(snapshot);
+  }
   return game as unknown as CoachedGame;
 }
 

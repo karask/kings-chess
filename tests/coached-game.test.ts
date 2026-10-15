@@ -13,6 +13,8 @@ import {
   appendGameMove,
   canTakeBack,
   createCoachedGame,
+  continueFromRetry,
+  switchSavedLine,
   gameBoard,
   gamePgn,
   gameResult,
@@ -75,6 +77,128 @@ function addSimpleAssessments(game: CoachedGame): CoachedGame {
   });
   return { ...game, assessments };
 }
+
+function retryResult(game: CoachedGame, ply: number, uci: string): MoveAssessment {
+  const board = new Chess(game.initialFen);
+  for (const move of game.moves.slice(0, ply - 1)) board.move(parseUciMove(move));
+  const beforeFen = board.fen();
+  const played = board.move(parseUciMove(uci));
+  return {
+    beforeFen, playedMove: uci, playedSan: played.san, bestMove: uci, bestSan: played.san,
+    classification: "unrated", title: "Test candidate", explanation: "Legal candidate with uncertain analysis.",
+    confidence: "limited", playedLine: [uci], bestLine: [uci], evidence: [],
+  };
+}
+
+test("continuing an earlier retry replaces the future and retains its assessed prefix and original game", () => {
+  const original = {
+    ...addSimpleAssessments(withSans(fresh(), "Nf3 d5 g3 Nf6 Bg2 e6")),
+    reviewSavedPlies: [1, 3, 5], skippedAssessmentPlies: [3],
+  };
+  const snapshot = structuredClone(original);
+  const candidate = retryResult(original, 3, "e2e4");
+  const next = continueFromRetry(original, 3, candidate);
+  assert.deepEqual(original, snapshot);
+  assert.deepEqual(next.moves, ["g1f3", "d7d5", "e2e4"]);
+  assert.deepEqual(next.assessments, [original.assessments[0], { ply: 3, assessment: candidate }]);
+  assert.deepEqual(next.reviewSavedPlies, [1]);
+  assert.deepEqual(next.skippedAssessmentPlies, []);
+  assert.notEqual(next.id, original.id);
+  assert.equal(next.createdAt, original.createdAt);
+  assert.deepEqual(next.savedLine, { kind: "original", game: original });
+  assert.equal(next.pausedAtPly, undefined);
+  assert.equal(gameBoard(next).turn(), "b");
+  assert.equal(next.assessments.at(-1)?.assessment.classification, "unrated");
+  validateCoachedGame(next);
+});
+
+test("retries work for Black and opening-position starts without changing the learner's side", () => {
+  const black = addSimpleAssessments(withSans(fresh({ family: "pirc", scenarioId: "pirc-austrian" }), "e4 d6 d4 Nf6 Nc3 g6"));
+  const revised = continueFromRetry(black, 4, retryResult(black, 4, "g8h6"));
+  assert.deepEqual(revised.moves, ["e2e4", "d7d6", "d2d4", "g8h6"]);
+  assert.equal(revised.learnerColor, "b");
+  assert.equal(gameBoard(revised).turn(), "w");
+  const root = fresh({ family: "pirc", scenarioId: "pirc-austrian", startMode: "tabiya" });
+  const original = addSimpleAssessments(withSans(root, "Bg7 Nf3"));
+  const continued = continueFromRetry(original, 1, retryResult(original, 1, "f6h5"));
+  assert.equal(continued.initialFen, root.initialFen);
+  assert.deepEqual(continued.moves, ["f6h5"]);
+  assert.equal(gameBoard(continued).turn(), "w");
+});
+
+test("a corrected move reopens a finished or resigned game and keeps the original result restorable", () => {
+  for (const original of [
+    addSimpleAssessments(withSans(fresh(), "f3 e5 g4 Qh4#")),
+    { ...addSimpleAssessments(withSans(fresh(), "f3 e5 g4")), resigned: true, pausedAtPly: 3 },
+  ]) {
+    const revised = continueFromRetry(original, 3, retryResult(original, 3, "g2g3"));
+    assert.equal(revised.resigned, undefined);
+    assert.equal(revised.pausedAtPly, undefined);
+    assert.equal(gameResult(revised), null);
+    assert.equal(gameResult(switchSavedLine(revised)), gameResult(original));
+  }
+});
+
+test("continuing retries retains castling, en passant, promotion and repetition history", () => {
+  for (const [line, ply, move] of [
+    ["e4 e5 Nf3 Nc6 Bc4 Nf6 d3", 7, "e1g1"],
+    ["e4 a6 e5 d5 Nf3", 5, "e5d6"],
+    ["a4 h5 a5 h4 a6 h3 axb7 hxg2 bxa8=Q", 9, "b7a8n"],
+  ] as const) {
+    const original = addSimpleAssessments(withSans(fresh(), line));
+    const revised = continueFromRetry(original, ply, retryResult(original, ply, move));
+    assert.equal(revised.moves.at(-1), move);
+    validateCoachedGame(revised);
+    if (move === "e1g1") assert.equal(gameBoard(revised).get("g1")?.type, "k");
+    if (move === "e5d6") assert.equal(gameBoard(revised).get("d5"), undefined);
+    if (move === "b7a8n") assert.equal(gameBoard(revised).get("a8")?.type, "n");
+  }
+  const draw = addSimpleAssessments(withSans(fresh(), "Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1 Ng8"));
+  const revised = continueFromRetry(draw, 7, retryResult(draw, 7, "f3g1"));
+  assert.equal(gameBoard(appendGameMove(revised, "f6g8")).isThreefoldRepetition(), true);
+});
+
+test("switching lines preserves both lines' progress and retries never create nested snapshots", () => {
+  const original = assessed();
+  let revised = continueFromRetry(original, 1, retryResult(original, 1, "e2e4"));
+  revised = appendGameMove(revised, "e7e5");
+  const restored = switchSavedLine(revised);
+  assert.deepEqual(restored.moves, original.moves);
+  assert.equal(restored.pausedAtPly, original.pausedAtPly);
+  assert.equal(restored.savedLine?.kind, "alternative");
+  const resumed = switchSavedLine(restored);
+  assert.deepEqual(resumed.moves, revised.moves);
+  assert.equal(resumed.savedLine?.kind, "original");
+  const another = continueFromRetry(resumed, 1, retryResult(resumed, 1, "d2d4"));
+  assert.deepEqual(another.savedLine?.game.moves, original.moves);
+  assert.equal("savedLine" in another.savedLine!.game, false);
+  const fromOriginal = continueFromRetry(restored, 1, retryResult(restored, 1, "c2c4"));
+  assert.deepEqual(fromOriginal.savedLine?.game.moves, original.moves);
+  assert.equal(fromOriginal.savedLine?.kind, "original");
+});
+
+test("retry continuations and their saved original survive reload and backup restore", async () => {
+  const revised = continueFromRetry(assessed(), 1, retryResult(assessed(), 1, "e2e4"));
+  await saveCoachedGame(revised);
+  assert.deepEqual(await loadCoachedGame(), JSON.parse(JSON.stringify(revised)));
+  const backup = await exportBackup();
+  await clearLocalData();
+  await restoreBackup(backup);
+  const loaded = (await loadCoachedGame())!;
+  assert.deepEqual(loaded, JSON.parse(JSON.stringify(revised)));
+  assert.deepEqual(switchSavedLine(loaded).moves, ["g1f3"]);
+});
+
+test("retries reject stale assessments, opponent moves, and nested or unrelated comparison lines", () => {
+  const game = addSimpleAssessments(withSans(fresh(), "Nf3 d5 g3"));
+  const candidate = retryResult(game, 3, "e2e4");
+  assert.throws(() => continueFromRetry(game, 1, candidate), /does not match/);
+  assert.throws(() => continueFromRetry(game, 2, retryResult(game, 2, "e7e5")), /learner decision/);
+  assert.throws(() => continueFromRetry(game, 4, candidate), /existing learner decision/);
+  const revised = continueFromRetry(game, 3, candidate);
+  assert.throws(() => validateCoachedGame({ ...revised, savedLine: { kind: "original", game: revised } }), /nested/);
+  assert.throws(() => validateCoachedGame({ ...revised, savedLine: { kind: "original", game: fresh({ family: "pirc", scenarioId: "pirc-austrian" }) } }), /another game/);
+});
 
 test("narrated tactical evidence survives local saving and lossless backup restore", async () => {
   const game = assessed();
