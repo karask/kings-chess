@@ -102,6 +102,29 @@ async function readyClient(options: ConstructorParameters<typeof StockfishClient
 test("StockfishClient worker contract", async (t) => {
   installBrowserWorkerHarness(t);
 
+  await t.test("a first hosted download can take over twenty seconds without failing initialization", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const client = new StockfishClient();
+    try {
+      const ready = client.initialize();
+      t.mock.timers.tick(25_000);
+      assert.equal(client.status, "loading");
+      ControllableWorker.instances.at(-1)!.emit({ type: "ready" });
+      assert.equal(await ready, true);
+    } finally { client.dispose(); t.mock.timers.reset(); }
+  });
+
+  await t.test("a permanently stalled download still has a bounded startup wait", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const client = new StockfishClient();
+    try {
+      const ready = client.initialize();
+      t.mock.timers.tick(120_000);
+      assert.equal(await ready, false);
+      assert.equal(client.status, "unavailable");
+    } finally { client.dispose(); t.mock.timers.reset(); }
+  });
+
   await t.test("passes fixed search options and custom asset URLs", async () => {
     const { client, worker } = await readyClient({
       workerUrl: "/test/coordinator.js",

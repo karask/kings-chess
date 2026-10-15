@@ -84,6 +84,8 @@ The current game and its optional saved comparison line resume after reload and 
 
 Coaching runs at full strength independently of opponent difficulty. It compares unrestricted and played-move-restricted searches with fixed budgets, and spends extra effort on large or uncertain differences. Sound off-book alternatives are not automatically mistakes.
 
+The first hosted engine start downloads approximately 7 MB of WebAssembly. Startup allows up to 90 seconds so slower downloads and simultaneous offline installation do not cause a false failure; subsequent analysis retains its short fixed budgets.
+
 The explanation layer checks immediate hanging pieces, moved or captured defenders, absolute pins that prevent recapture, opened sliding-piece attacks, demonstrated forks, and concrete defensive escapes or added defenders. Harmful tactical explanations require the existing settled-material comparison; short exchanges and recovered sacrifices remain guarded. Where possible, it explains how the suggested alternative changes the specific capture threat. It also uses demonstrated mating lines, exact authored opening instruction, and separately labeled structure reminders.
 
 Walkthrough narration is attached to a specific branch and move: a fork is shown when it appears and its capture when it happens. Other steps describe visible checks, captures, castling, and promotions without inventing a strategic cause. Older saved games receive the new walkthrough explanations from their stored lines. A tested reply shows its evaluation from the moving side's perspective, because even the best defense can leave a losing position. All checks use the local engine, retain repetition history, and can be cancelled by returning to the game or changing the displayed step.

@@ -202,7 +202,9 @@ export class StockfishClient {
   constructor(options: StockfishClientOptions = {}) {
     this.workerUrl = options.workerUrl ?? assetUrl("stockfish-engine.worker.js");
     this.engineUrl = options.engineUrl ?? assetUrl("engine/stockfish-18-lite-single.js");
-    this.initializationTimeoutMs = options.initializationTimeoutMs ?? 20_000;
+    // The first hosted start downloads a 7 MB WASM asset, potentially while
+    // the offline installer is also caching it. Search budgets start later.
+    this.initializationTimeoutMs = options.initializationTimeoutMs ?? 90_000;
   }
 
   get status(): EngineStatus {

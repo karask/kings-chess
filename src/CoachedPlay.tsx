@@ -271,7 +271,7 @@ export function CoachedPlay({ rating, onRecorded, onPractice, onRevisit, hasDueR
     async function advance() {
       engine.current ??= new StockfishClient();
       if (pendingAssessment) {
-        setActivity("Coach is comparing your move…");
+        setActivity(engine.current.status === "ready" ? "Coach is comparing your move…" : "Loading Stockfish · the first download is about 7 MB…");
         const assessment = await assessMove(engine.current, { initialFen: current.initialFen, moves: current.moves.slice(0, -1), playedMove: current.moves.at(-1)!, family: current.family, signal: controller.signal });
         if (controller.signal.aborted || gameRef.current !== current) return;
         const shouldPause = current.coaching === "every" || (current.coaching === "critical" && BAD_MOVES.has(assessment.classification));
