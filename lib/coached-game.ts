@@ -361,10 +361,26 @@ function validateAssessment(value: unknown, board: Chess, playedMove: string): v
   for (const field of ["bestScore", "playedScore"]) if (assessment[field] !== undefined) validateScore(assessment[field]);
   validateLine(assessment.bestLine, board, bestMove);
   validateLine(assessment.playedLine, board, playedMove);
+  if (assessment.lesson !== undefined) {
+    const lesson = record(assessment.lesson, "coaching lesson");
+    if (!oneOf(lesson.basis, ["position", "continuation"])) fail("Invalid lesson basis.");
+    for (const field of ["theme", "yourMove", "takeaway"]) shortString(lesson[field], `lesson ${field}`);
+    for (const field of ["opponentReply", "alternative", "responseCheck"]) {
+      if (lesson[field] !== undefined) shortString(lesson[field], `lesson ${field}`);
+    }
+  }
+  if (assessment.responseProbe !== undefined) {
+    const probe = record(assessment.responseProbe, "response probe");
+    const reply = uci(probe.reply);
+    validateScore(probe.score);
+    validateLine(probe.line, board, bestMove);
+    if ((probe.line as unknown[]).length < 3 || (probe.line as unknown[])[1] !== reply
+      || (assessment.playedLine as unknown[])[1] !== reply) fail("Response probe does not match the compared reply.");
+  }
   if (!Array.isArray(assessment.evidence) || assessment.evidence.length > 8) fail("Invalid coaching evidence.");
   for (const item of assessment.evidence) {
     const evidence = record(item, "coaching evidence");
-    if (!oneOf(evidence.kind, ["checkmate", "stalemate", "material", "knight-fork", "authored", "hanging-piece", "defender", "pin", "discovered-attack", "fork", "defense"])) fail("Invalid evidence kind.");
+    if (!oneOf(evidence.kind, ["checkmate", "stalemate", "material", "knight-fork", "authored", "hanging-piece", "defender", "pin", "discovered-attack", "fork", "defense", "position"])) fail("Invalid evidence kind.");
     shortString(evidence.text, "evidence text");
     if (!Array.isArray(evidence.squares) || evidence.squares.length > 64 || evidence.squares.some((square) => typeof square !== "string" || !/^[a-h][1-8]$/.test(square))) fail("Invalid evidence squares.");
     if (evidence.line !== undefined && !oneOf(evidence.line, ["played", "best"])) fail("Invalid evidence line.");

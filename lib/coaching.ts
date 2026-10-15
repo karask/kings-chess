@@ -2,6 +2,7 @@ import { Chess, type Color, type Move, type PieceSymbol, type Square } from "che
 
 import { canonicalEpd, canonicalFen, moveToUci, parseUciMove } from "./chess";
 import { alternativeDefense, broaderFork, goodDefense, materialMechanisms } from "./coaching-tactics";
+import { positionalLesson } from "./coaching-position";
 import { openingRecallPrompts, type OpeningFamily } from "./curriculum";
 import { EngineCancelledError, type StockfishClient } from "./engine";
 import type { EngineAnalysis, EngineScore, EngineSearchOptions } from "./types";
@@ -11,7 +12,7 @@ export type MoveClassification =
 
 export interface CoachingEvidence {
   kind: "checkmate" | "stalemate" | "material" | "knight-fork" | "authored"
-    | "hanging-piece" | "defender" | "pin" | "discovered-attack" | "fork" | "defense";
+    | "hanging-piece" | "defender" | "pin" | "discovered-attack" | "fork" | "defense" | "position";
   text: string;
   squares: string[];
   /** Evidence belongs to one branch; a fact about a bad line is not shown on its alternative. */
@@ -19,6 +20,25 @@ export interface CoachingEvidence {
   /** 1-based ply, after the indicated move within the branch. */
   ply?: number;
   steps?: { ply: number; text: string; squares: string[] }[];
+}
+
+export interface CoachingLesson {
+  theme: string;
+  yourMove: string;
+  opponentReply?: string;
+  alternative?: string;
+  takeaway: string;
+  basis: "position" | "continuation";
+  responseCheck?: string;
+}
+
+/** A targeted test of the played line's reply after the alternative move.
+ * The line includes that alternative root; score uses the learner's perspective.
+ */
+export interface ResponseProbe {
+  reply: string;
+  line: string[];
+  score: EngineScore;
 }
 
 /** Serializable: neither chess.js instances nor browser objects enter saved games. */
@@ -40,6 +60,8 @@ export interface MoveAssessment {
   authoredContext?: string;
   strategicContext?: string;
   evidence: CoachingEvidence[];
+  lesson?: CoachingLesson;
+  responseProbe?: ResponseProbe;
 }
 
 export interface AssessMoveInput {
@@ -302,6 +324,7 @@ export interface ExplainMoveInput {
   family: OpeningFamily;
   bestScore?: EngineScore;
   playedScore?: EngineScore;
+  responseProbe?: ResponseProbe;
 }
 
 export interface MoveExplanation {
@@ -311,12 +334,50 @@ export interface MoveExplanation {
   evidence: CoachingEvidence[];
   authoredContext?: string;
   strategicContext?: string;
+  lesson?: CoachingLesson;
 }
 
 const CLASSIFICATION_LABELS: Record<MoveClassification, string> = {
   best: "Best", excellent: "Excellent", good: "Good", inaccuracy: "Inaccuracy",
   mistake: "Mistake", blunder: "Blunder", unrated: "Analysis uncertain",
 };
+
+function replyDescription(replay: ReplayedCoachingLine): string | undefined {
+  const reply = replay.moves[1];
+  if (!replay.legal || !reply) return undefined;
+  return `In the analyzed continuation, ${reply.color === "w" ? "White" : "Black"} replies ${reply.san}${reply.captured ? `, capturing the ${PIECE_NAMES[reply.captured]} on ${reply.isEnPassant() ? `${reply.to[0]}${reply.from[1]}` : reply.to}` : ""}.`;
+}
+
+const TACTICAL_TAKEAWAYS: Partial<Record<CoachingEvidence["kind"], string>> = {
+  "hanging-piece": "Before placing a piece, check the opponent's captures and whether you can safely recapture.",
+  defender: "Before moving or exchanging a defender, check what it will leave unprotected.",
+  pin: "A piece pinned to its king may not be able to recapture. Check legal recaptures, not just apparent protection.",
+  "discovered-attack": "When a piece moves, inspect the rook, bishop, and queen lines it opens.",
+  fork: "Check whether the opponent can attack two valuable targets at once.",
+  "knight-fork": "Check the enemy knight's checking squares and which second target each square attacks.",
+  defense: "Identify the opponent's concrete threat before choosing your own plan.",
+};
+
+/** Compare the SAME reply, rather than treating a different PV as prevention. */
+function responseComparison(input: ExplainMoveInput): string | undefined {
+  if (input.playedMove === input.bestMove || !input.playedLine[1]) return undefined;
+  const reply = input.playedLine[1];
+  const played = replayCoachingLine(input.beforeFen, input.playedLine);
+  if (!played.legal || input.playedLine[0] !== input.playedMove) return undefined;
+  const alternative = new Chess(input.beforeFen);
+  const bestSan = alternative.move(parseUciMove(input.bestMove)).san;
+  let response: Move;
+  try { response = alternative.move(parseUciMove(reply)); }
+  catch { return `After ${bestSan}, ${played.moves[1].san} is no longer a legal reply.`; }
+  const probe = input.responseProbe;
+  if (!probe || probe.reply !== reply || probe.line[0] !== input.bestMove || probe.line[1] !== reply
+    || probe.score.bound || probe.score.type !== "cp" || !Number.isFinite(probe.score.value)) return undefined;
+  const checked = replayCoachingLine(input.beforeFen, probe.line);
+  if (!checked.legal || checked.moves.length < 3) return undefined;
+  const continuation = checked.san.slice(1, 5).join(" ");
+  const score = `${probe.score.value >= 0 ? "+" : ""}${(probe.score.value / 100).toFixed(2)}`;
+  return `${response.san} is still possible after ${bestSan}. A separate search checked ${continuation} (${score} from your side). This tests how you can meet the reply; ${bestSan} does not prevent it.`;
+}
 
 export function explainMove(input: ExplainMoveInput): MoveExplanation {
   const board = new Chess(canonicalFen(input.beforeFen));
@@ -432,7 +493,40 @@ export function explainMove(input: ExplainMoveInput): MoveExplanation {
     }
   }
 
-  return { title, explanation, confidence: evidence.length ? "verified" : "limited", evidence, ...(authoredContext ? { authoredContext } : {}), ...(strategicContext ? { strategicContext } : {}) };
+  let lesson: CoachingLesson | undefined;
+  // Positional facts teach a plan, but are not proof of the cause of an engine
+  // score. Tactical/terminal explanations always keep priority.
+  if (input.classification !== "unrated" && !board.isGameOver()
+    && input.bestScore?.type !== "mate" && input.playedScore?.type !== "mate") {
+    const position = positionalLesson(input);
+    const mechanism = evidence.find((item) => item.line === "played" && TACTICAL_TAKEAWAYS[item.kind]);
+    const defense = evidence.find((item) => item.line === "best" && item.kind === "defense");
+    if (mechanism) {
+      lesson = {
+        theme: title.replace(`${label} — `, ""), yourMove: mechanism.text,
+        opponentReply: replyDescription(playedReplay),
+        ...(input.playedMove !== input.bestMove ? { alternative: defense?.text ?? position?.alternative ?? `Compare the continuation beginning with ${bestSan} to see how the position changes.` } : {}),
+        takeaway: TACTICAL_TAKEAWAYS[mechanism.kind]!, basis: "continuation",
+      };
+    } else if (position && (evidence.length === 0 || evidence.every((item) => item.kind === "authored"))
+      // An unfinished tactical exchange must not be disguised as a quiet
+      // positional lesson just because moving a piece also opens a diagonal.
+      && !(bad && playedReplay.moves.slice(0, 3).some((move) => move.captured || move.promotion)
+        && (!settledForComparison(playedReplay) || !settledForComparison(bestReplay)))) {
+      const { evidence: positionEvidence, ...teaching } = position;
+      lesson = { ...teaching, ...(!bad && authoredPlayed ? { yourMove: authoredPlayed } : {}), basis: "position" };
+      evidence.push(...positionEvidence);
+      title = `${label} — ${position.theme}`;
+      explanation = [!bad && input.playedMove !== input.bestMove ? "Your move is a sound alternative." : undefined,
+        lesson.yourMove, lesson.opponentReply, lesson.alternative, lesson.takeaway].filter(Boolean).join(" ");
+      if (bad) {
+        const responseCheck = responseComparison(input);
+        if (responseCheck) lesson.responseCheck = responseCheck;
+      }
+    }
+  }
+  return { title, explanation, confidence: evidence.some((item) => item.kind !== "position") ? "verified" : "limited", evidence,
+    ...(lesson ? { lesson } : {}), ...(authoredContext ? { authoredContext } : {}), ...(strategicContext ? { strategicContext } : {}) };
 }
 
 function aborted(signal?: AbortSignal): void {
@@ -512,9 +606,40 @@ export async function assessMove(engine: Pick<StockfishClient, "analyze">, input
   const bestSan = bestBoard.move(parseUciMove(bestMove)).san;
   const bestLine = best.line.length ? best.line : [bestMove];
   const playedLine = chosen.line.length ? chosen.line : [playedMove];
-  const explanation = explainMove({ beforeFen, playedMove, bestMove, bestLine, playedLine, classification: quality.classification, family: input.family, bestScore: best.score, playedScore: chosen.score });
+  const explanationInput: ExplainMoveInput = { beforeFen, playedMove, bestMove, bestLine, playedLine, classification: quality.classification, family: input.family, bestScore: best.score, playedScore: chosen.score };
+  let explanation = explainMove(explanationInput);
+  let responseProbe: ResponseProbe | undefined;
+  // Spend a little extra calculation only on a positional error with a
+  // different opponent reply. Other moves retain the existing search budget.
+  const reply = playedLine[1];
+  if (explanation.lesson?.basis === "position" && ["inaccuracy", "mistake", "blunder"].includes(quality.classification)
+    && bestMove !== playedMove && reply && reply !== bestLine[1]) {
+    const afterBest = new Chess(beforeFen);
+    afterBest.move(parseUciMove(bestMove));
+    const legalReply = afterBest.moves({ verbose: true }).some((move) => moveToUci(move) === reply);
+    if (!afterBest.isGameOver() && legalReply) {
+      aborted(input.signal);
+      try {
+        const checked = readAnalysis(await engine.analyze(afterBest.fen(), {
+          history: { ...history, moves: [...history.moves, bestMove] }, searchMoves: [reply],
+          nodes: 40_000, moveTimeMs: 750, skillLevel: 20, multiPv: 1, timeoutMs: 20_000, signal: input.signal,
+        }), afterBest.fen(), reply);
+        aborted(input.signal);
+        if (checked.score && !checked.score.bound && Number.isFinite(checked.score.value) && checked.line.length >= 2) {
+          responseProbe = { reply, line: [bestMove, ...checked.line].slice(0, 64), score: { type: checked.score.type, value: -checked.score.value } };
+          explanation = explainMove({ ...explanationInput, responseProbe });
+        }
+      } catch (error) {
+        // This optional check cannot discard a completed move assessment, but
+        // cancellation must still stop the entire operation.
+        if (error instanceof EngineCancelledError) throw error;
+        aborted(input.signal);
+      }
+    }
+  }
   return {
     ...base, ...quality, ...explanation, bestMove, bestSan, bestLine, playedLine,
+    ...(responseProbe ? { responseProbe } : {}),
     ...(best.score ? { bestScore: best.score } : {}), ...(chosen.score ? { playedScore: chosen.score } : {}),
   };
 }

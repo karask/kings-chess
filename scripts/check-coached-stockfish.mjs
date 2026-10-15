@@ -197,6 +197,14 @@ try {
   validateCoachedGame({ ...appendGameMove(pirc, "f8g7"), assessments: [{ ply: 1, assessment: pircAssessment }] });
   console.log(`PASS: Austrian Bg7 assessment retains ${pircAssessment.playedLine.length}-ply PV; ${JSON.stringify({ classification: pircAssessment.classification, bestMove: pircAssessment.bestMove, bestScore: pircAssessment.bestScore, playedScore: pircAssessment.playedScore })}`);
 
+  const quiet = await assessMove(client, { initialFen, moves: [], playedMove: "g1f3", family: "kia" });
+  assert.equal(quiet.lesson?.basis, "position", "real quiet-move analysis produces a positional lesson");
+  assert.match(quiet.lesson.yourMove, /f3/);
+  assert.ok(quiet.lesson.takeaway);
+  assert.equal(quiet.confidence, "limited", "positional facts are not labeled a tactical proof");
+  validateCoachedGame({ ...appendGameMove(fresh(), "g1f3"), assessments: [{ ply: 1, assessment: quiet }] });
+  console.log(`PASS: real Nf3 analysis teaches the central task: ${quiet.lesson.yourMove}`);
+
   // Report domain cost, not a machine-dependent pass/fail timing assertion.
   const sample = fresh();
   const sampleBoard = new Chess(sample.initialFen);

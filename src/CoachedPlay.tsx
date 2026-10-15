@@ -7,6 +7,7 @@ import { assessMove, explainMove, type MoveAssessment } from "../lib/coaching";
 import { buildCoachingWalkthrough } from "../lib/coaching-walkthrough";
 import { CoachWalkthrough } from "./CoachWalkthrough";
 import { RetryActions } from "./RetryActions";
+import { MoveLesson } from "./MoveLesson";
 import {
   COACHED_SCENARIOS, appendGameMove, createCoachedGame, gameBoard, gamePgn,
   gameResult, loadCoachedGame, opponentBookMove, saveCoachedGame, canTakeBack, takeBackTurn, continueFromRetry, switchSavedLine, type CoachedGame,
@@ -121,19 +122,23 @@ function Assessment({ assessment: savedAssessment, family }: { assessment: MoveA
   const alternative = assessment.evidence.find((item) => item.line === "best" && item.kind === "defense");
   const brief = mechanism?.text ?? (assessment.explanation.length > 180 && sentenceEnd >= 0
     ? assessment.explanation.slice(0, sentenceEnd + 1) : assessment.explanation);
+  const lesson = assessment.lesson;
+  const heading = lesson?.theme ?? assessment.title;
   return <div className={`move-assessment grade-${assessment.classification}`}>
     <div className="assessment-heading"><span className="move-grade">{assessment.classification}</span><strong>{assessment.playedSan}</strong></div>
-    {assessment.title.toLowerCase() !== assessment.classification ? <h3>{assessment.title}</h3> : null}
-    <p>{brief}</p>
-    {alternative ? <p className="assessment-alternative"><strong>Why {assessment.bestSan} helps:</strong> {alternative.text}</p> : null}
-    {assessment.confidence === "limited" ? <small>A concrete explanation has not yet been established; this is a bounded engine assessment.</small> : null}
+    {heading.toLowerCase() !== assessment.classification ? <h3>{heading}</h3> : null}
+    {lesson ? <MoveLesson lesson={lesson} bestSan={assessment.bestSan} classification={assessment.classification} /> : <>
+      <p>{brief}</p>
+      {alternative ? <p className="assessment-alternative"><strong>Why {assessment.bestSan} helps:</strong> {alternative.text}</p> : null}
+      {assessment.confidence === "limited" ? <small>A concrete explanation has not yet been established; this is a bounded engine assessment.</small> : null}
+    </>}
     <details className="assessment-detail"><summary>More context & analysis</summary>
-      {brief !== assessment.explanation ? <p>{assessment.explanation}</p> : null}
+      {lesson || brief !== assessment.explanation ? <p>{assessment.explanation}</p> : null}
       {assessment.bestMove !== assessment.playedMove ? <p>Compare with <strong>{assessment.bestSan}</strong>. Other sound moves can also be good.</p> : null}
       {assessment.authoredContext ? <><h4>Exact-position opening lesson</h4><p>{assessment.authoredContext}</p></> : null}
-      {assessment.strategicContext ? <><h4>Structure guidance — not a proven cause</h4><p>{assessment.strategicContext}</p></> : null}
+      {assessment.strategicContext ? <><h4>{lesson ? "Opening structure" : "Structure guidance — not a proven cause"}</h4><p>{assessment.strategicContext}</p></> : null}
       <h4>Engine comparison</h4><p>Preferred move: {scoreText(assessment.bestScore)}. Your move: {scoreText(assessment.playedScore)}.{assessment.lossCp !== undefined ? ` Estimated loss: ${(assessment.lossCp / 100).toFixed(2)}.` : ""}</p><p>Both scores are from your perspective. Fixed-budget searches use their last completed, comparable iteration; they are estimates, not a proof of optimal play.</p>
-      <small>{assessment.confidence === "verified" ? "Explanation supported by a checked continuation or authored position." : "Limited explanation: engine preference is not a complete strategic proof."}</small>
+      <small>{lesson?.basis === "position" ? "The lesson describes visible positional features and plans. The engine comparison estimates their relative value; these features alone do not establish why the score changes." : assessment.confidence === "verified" ? "Explanation supported by a checked continuation or authored position." : "Limited explanation: engine preference is not a complete strategic proof."}</small>
     </details>
   </div>;
 }

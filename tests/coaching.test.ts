@@ -218,7 +218,9 @@ test("a sound off-book move remains good; authored text is not substituted for i
   const prompt = openingRecallPrompts[0];
   const explanation = explainMove({ beforeFen: prompt.fen, playedMove: "c7c6", bestMove: "f8g7", playedLine: ["c7c6"], bestLine: ["f8g7"], classification: "good", family: "pirc" });
   assert.match(explanation.explanation, /sound alternative/);
-  assert.equal(explanation.evidence.length, 0);
+  assert.ok(explanation.evidence.every((item) => item.kind === "position"));
+  assert.equal(explanation.confidence, "limited");
+  assert.equal(explanation.lesson?.basis, "position");
   assert.match(explanation.authoredContext!, /Repertoire note for Bg7/);
   assert.doesNotMatch(explanation.explanation, /develops, pressures the long diagonal/);
 });

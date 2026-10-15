@@ -1,6 +1,6 @@
 const BASE = new URL("./", self.location.href);
 const CACHE_PREFIX = `kings-study:${BASE.pathname}:`;
-const CACHE_VERSION = `${CACHE_PREFIX}v17-hosted-engine-startup`;
+const CACHE_VERSION = `${CACHE_PREFIX}v18-positional-coaching`;
 const asset = (path) => new URL(path, BASE).href;
 const CORE = [
   "./", "offline.html", "manifest.webmanifest", "favicon.svg", "og.png",

@@ -88,9 +88,13 @@ The first hosted engine start downloads approximately 7 MB of WebAssembly. Start
 
 The explanation layer checks immediate hanging pieces, moved or captured defenders, absolute pins that prevent recapture, opened sliding-piece attacks, demonstrated forks, and concrete defensive escapes or added defenders. Harmful tactical explanations require the existing settled-material comparison; short exchanges and recovered sacrifices remain guarded. Where possible, it explains how the suggested alternative changes the specific capture threat. It also uses demonstrated mating lines, exact authored opening instruction, and separately labeled structure reminders.
 
+Quiet moves now receive position-specific lessons about development and central control, pawn challenges and support, the fianchetto bishop's actual diagonal, castling and pawn cover, and open or half-open rook files. Pirc/KID/KIA rules require the relevant pieces and pawn structure: the closed KID knight retreat preparing ...f5 is not applied just because KID was selected, and the KIA e5 plan distinguishes an e6 lock from a d5 centre. Apparent control is checked for legal captures, including pins. Lessons name squares and compare **Your move**, **Opponent's response**, **Alternative**, and **Remember** inside the existing coach panel.
+
+For a positional error with different replies in the two continuations, the coach can run one additional restricted search (at most 40,000 nodes / 750 ms of engine search) to test the played line's reply after the alternative. This test retains full history, normalizes the score to the learner, and is saved with the game and backups. It explicitly distinguishes preventing a reply from meeting it differently. Optional search failure preserves the completed assessment; cancellation still stops the operation. Older saved games gain positional lessons from their existing lines without requiring new searches.
+
 Walkthrough narration is attached to a specific branch and move: a fork is shown when it appears and its capture when it happens. Other steps describe visible checks, captures, castling, and promotions without inventing a strategic cause. Older saved games receive the new walkthrough explanations from their stored lines. A tested reply shows its evaluation from the moving side's perspective, because even the best defense can leave a losing position. All checks use the local engine, retain repetition history, and can be cancelled by returning to the game or changing the displayed step.
 
-This is still a limited explanation system, especially for quiet or strategic moves. A legal continuation demonstrates that line; it does not prove that every defense fails. The coach does not treat a geometric attack or a temporary material deficit alone as proof that a move is bad.
+Positional observations remain distinct from a demonstrated tactical mechanism: recognizing a useful square or pawn break does not prove it caused the evaluation difference. A legal continuation demonstrates that line; it does not prove that every defense fails. The coach does not treat a geometric attack or a temporary material deficit alone as proof that a move is bad, and an unfinished tactical exchange cannot be disguised as a quiet positional lesson.
 
 Move labels use transparent centipawn-loss thresholds rather than Chess.com's proprietary system: Excellent ≤15, Good ≤50, Inaccuracy ≤100, Mistake ≤200, Blunder >200. Best is the engine's first choice; mate is handled separately, and unstable comparisons are Unrated. No Brilliant/Great labels or language-model service are used.
 
@@ -109,8 +113,8 @@ The puzzle snapshot and filters are recorded in [`public/data/puzzle-manifest.js
 The next development priority is validated chess reasoning, not more menus or more fluent generic prose:
 
 1. Broaden the tactical comparison beyond immediate capture mechanisms to overloaded defenders, longer combinations, and competing threats, with legal counterexamples and sacrifice checks.
-2. Add structure-aware teaching rules for development, king safety, fianchetto bishops, central tension, and pawn-break timing; each rule needs prerequisites and exceptions.
-3. Expand the regression positions into an explanation-quality benchmark covering quiet, defensive, opening, and endgame decisions. Track unsupported claims, useful coverage, and latency.
+2. Extend the initial structure-aware rules to longer plans, delayed weaknesses, and endgame decisions, preserving prerequisites and exceptions.
+3. Expand the positional and comparison regression positions into a larger explanation-quality benchmark. Track unsupported claims, useful coverage, and latency.
 
 These are future explanation-engine improvements, not capabilities claimed by the simplified interface.
 
@@ -126,6 +130,7 @@ These are future explanation-engine improvements, not capabilities claimed by th
 - `lib/engine.ts` and `public/stockfish-engine.worker.js`: browser-only UCI engine adapter.
 - `lib/coaching.ts`: forced-root move comparisons, cautious grading, and replay-verified explanations.
 - `lib/coaching-tactics.ts`: legal capture relationships and concrete tactical causes/defenses.
+- `lib/coaching-position.ts`: structure-gated positional observations, square-specific plans, and compared lessons.
 - `lib/coaching-walkthrough.ts` and `src/CoachWalkthrough.tsx`: step-specific narration and interactive comparison.
 - `lib/coached-game.ts`: opening scenarios, history-preserving full games, outcomes, PGN export, and validated autosave.
 - `lib/evaluation.ts` and `src/EvaluationBar.tsx`: White-perspective position scores and a cancellable, shared-worker evaluation rail.

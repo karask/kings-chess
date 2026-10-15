@@ -37,6 +37,13 @@
 .coached-pattern-practice { margin-top: 12px; font-size: .78rem; }
 .coached-page .assessment-detail { margin-bottom: 0; }
 .assessment-detail h4 { margin: 16px 0 4px; font-size: .8rem; }
+.move-lesson { margin: 12px 0 0; min-width: 0; }
+.move-lesson > div { margin-top: 10px; }
+.move-lesson dt { color: var(--ink); font-size: .72rem; font-weight: 750; line-height: 1.5; }
+.move-lesson dd { margin: 3px 0 0; font-size: .81rem; line-height: 1.6; overflow-wrap: anywhere; }
+.move-lesson .lesson-takeaway { padding-top: 9px; border-top: 1px solid var(--line); }
+.move-lesson .lesson-takeaway dt { color: var(--forest); }
+.coached-panel .move-lesson .lesson-response-check { margin: 7px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.5; }
 .coached-opening-plan { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .coached-page .coached-panel { display: flex; flex-direction: column; height: calc(100dvh - 176px); overflow: hidden; }
 .coached-coach-copy { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }

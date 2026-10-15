@@ -5,7 +5,7 @@ import { after, before, test } from "node:test";
 import { Chess } from "chess.js";
 
 import { canonicalEpd, moveToUci, parseUciMove } from "../lib/chess";
-import type { MoveAssessment } from "../lib/coaching";
+import { explainMove, type MoveAssessment } from "../lib/coaching";
 import {
   COACHED_GAME_SETTING,
   COACHED_SCENARIOS,
@@ -509,6 +509,36 @@ test("autosave survives database close and versioned backup/restore without data
   await restoreBackup(backup, { mode: "replace" });
   assert.deepEqual(await loadCoachedGame(), game);
   assert.equal(gameBoard((await loadCoachedGame())!).fen(), gameBoard(game).fen());
+});
+
+test("positional lessons and targeted reply checks survive reload and backup restore", async () => {
+  await clearLocalData();
+  const game = withSans(fresh(), "a3");
+  const base = {
+    beforeFen: game.initialFen, playedMove: "a2a3", playedSan: "a3", bestMove: "g1f3", bestSan: "Nf3",
+    classification: "mistake" as const, playedLine: ["a2a3", "e7e5", "g1f3"], bestLine: ["g1f3", "d7d5", "g2g3"],
+    responseProbe: { reply: "e7e5", line: ["g1f3", "e7e5", "f3e5"], score: { type: "cp" as const, value: 55 } },
+  };
+  const assessment: MoveAssessment = { ...base, ...explainMove({ ...base, family: "kia" }) };
+  assert.equal(assessment.lesson?.basis, "position");
+  assert.ok(assessment.lesson?.responseCheck);
+  game.assessments = [{ ply: 1, assessment }];
+  validateCoachedGame(game);
+  await saveCoachedGame(game);
+  closeChessTrainerDb();
+  assert.deepEqual(await loadCoachedGame(), game);
+  const backup = await exportBackup();
+  await clearLocalData();
+  await restoreBackup(backup, { mode: "replace" });
+  assert.deepEqual(await loadCoachedGame(), game);
+  for (const changes of [
+    { lesson: { ...assessment.lesson, basis: "proven" } },
+    { lesson: { ...assessment.lesson, yourMove: 42 } },
+    { responseProbe: { ...base.responseProbe, line: ["g1f3", "e7e5", "f3f7"] } },
+    { responseProbe: { ...base.responseProbe, reply: "d7d5" } },
+  ]) {
+    assert.throws(() => validateCoachedGame({ ...game, assessments: [{ ply: 1, assessment: { ...assessment, ...changes } }] }), CoachedGameValidationError);
+  }
 });
 
 test("taken-back games reload and restore while old spaced reviews remain separate from the replayed branch", async () => {
